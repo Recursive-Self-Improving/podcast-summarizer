@@ -41,6 +41,12 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("config error: %w", err)
 	}
+	if cfg.TempRoot != "" {
+		if err := os.MkdirAll(cfg.TempRoot, 0o755); err != nil {
+			return fmt.Errorf("create temp root: %w", err)
+		}
+	}
+
 	database, err := db.Open(ctx, cfg.SQLitePath)
 	if err != nil {
 		return err
@@ -76,7 +82,7 @@ func run(logger *slog.Logger) error {
 		return fmt.Errorf("initialize telegram bot: %w", err)
 	}
 
-	sender := botpkg.Sender{Client: botpkg.TelegramSenderClient{Bot: telegramBot}, Logger: logger.With("component", "telegram_sender")}
+	sender := botpkg.Sender{Client: botpkg.TelegramSenderClient{Bot: telegramBot}, TempDir: cfg.TempRoot, Logger: logger.With("component", "telegram_sender")}
 	progressNotifier := service.ProgressNotifier{Repo: repo, Sender: sender, Logger: logger.With("component", "progress_notifier")}
 	llm := summarize.NewOpenAIResponses(cfg.OpenAIBaseURL, cfg.OpenAIAPIKey, cfg.OpenAIModel)
 	summaryService := service.SummaryService{
@@ -85,6 +91,7 @@ func run(logger *slog.Logger) error {
 		SubtitleDownloader: transcript.Downloader{
 			YTDLP:     cfg.YTDLPPath,
 			YTDLPArgs: cfg.YTDLPArgs,
+			TempRoot:  cfg.TempRoot,
 			Logger:    logger.With("component", "subtitle_downloader"),
 		},
 		Summarizer: summarize.Service{Summarizer: llm},
@@ -136,6 +143,7 @@ func run(logger *slog.Logger) error {
 				YTDLPArgs:      cfg.YTDLPArgs,
 				FFmpeg:         cfg.FFmpegPath,
 				SegmentSeconds: cfg.WhisperSegmentSecs,
+				TempRoot:       cfg.TempRoot,
 			},
 			Transcriber: transcribe.Helper{
 				PythonPath:     cfg.PythonPath,

@@ -80,6 +80,9 @@ func TestLoadWithLookupAppliesDefaults(t *testing.T) {
 	if cfg.SQLitePath != defaultSQLitePath {
 		t.Fatalf("SQLitePath = %q", cfg.SQLitePath)
 	}
+	if cfg.TempRoot != "" {
+		t.Fatalf("TempRoot = %q", cfg.TempRoot)
+	}
 	if cfg.YTDLPPath != defaultYTDLPPath {
 		t.Fatalf("YTDLPPath = %q", cfg.YTDLPPath)
 	}
@@ -114,6 +117,7 @@ func TestLoadWithLookupReadsOverrides(t *testing.T) {
 		"OPENAI_API_KEY":            "openai-key",
 		"OPENAI_MODEL":              "custom-model",
 		"SQLITE_PATH":               "/tmp/bot.db",
+		"TEMP_ROOT":                 "/var/lib/bot/tmp",
 		"YT_DLP_PATH":               "/usr/local/bin/yt-dlp",
 		"YT_DLP_ARGS":               "--extractor-args \"youtube:player_client=mweb\" --cookies /var/lib/bot/cookies.txt",
 		"FFMPEG_PATH":               "/usr/local/bin/ffmpeg",
@@ -138,6 +142,9 @@ func TestLoadWithLookupReadsOverrides(t *testing.T) {
 	}
 	if cfg.SQLitePath != "/tmp/bot.db" {
 		t.Fatalf("SQLitePath = %q", cfg.SQLitePath)
+	}
+	if cfg.TempRoot != "/var/lib/bot/tmp" {
+		t.Fatalf("TempRoot = %q", cfg.TempRoot)
 	}
 	if cfg.YTDLPPath != "/usr/local/bin/yt-dlp" {
 		t.Fatalf("YTDLPPath = %q", cfg.YTDLPPath)

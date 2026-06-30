@@ -31,6 +31,7 @@ type Config struct {
 	OpenAIAPIKey       string
 	OpenAIModel        string
 	SQLitePath         string
+	TempRoot           string
 	YTDLPPath          string
 	YTDLPArgs          []string
 	FFmpegPath         string
@@ -64,6 +65,7 @@ func LoadWithLookup(lookup LookupFunc) (Config, error) {
 	cfg := Config{
 		OpenAIBaseURL:      getOrDefault(lookup, "OPENAI_BASE_URL", defaultOpenAIBaseURL),
 		SQLitePath:         getOrDefault(lookup, "SQLITE_PATH", defaultSQLitePath),
+		TempRoot:           getOrDefault(lookup, "TEMP_ROOT", ""),
 		YTDLPPath:          getOrDefault(lookup, "YT_DLP_PATH", defaultYTDLPPath),
 		FFmpegPath:         getOrDefault(lookup, "FFMPEG_PATH", defaultFFmpegPath),
 		PythonPath:         getOrDefault(lookup, "PYTHON_PATH", defaultPythonPath),
