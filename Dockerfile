@@ -34,7 +34,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # (which Docker mounts as root-owned by default) is writable at first run.
 RUN useradd --create-home --uid 1000 podcast \
     && mkdir -p /data /tmp/podcast \
-    && chown -R podcast:podcast /data
+    && chown -R podcast:podcast /data /tmp/podcast
 USER podcast
 WORKDIR /home/podcast
 
