@@ -1,0 +1,28 @@
+# Keep the Docker build context small and reproducible.
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Build artifacts and data
+bin/
+data/
+*.db
+*.db-*
+*.test
+*.out
+coverage.out
+
+# Temp and caches
+tmp/
+temp/
+*.tmp
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Editor / agent local state
+.claude/*.local.md
+.git/

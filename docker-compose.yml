@@ -1,0 +1,27 @@
+services:
+  podcast-summarizer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: podcast-summarizer:latest
+    container_name: podcast-summarizer
+    restart: unless-stopped
+    # Secrets and config come from your local .env (see .env.example).
+    # Shell environment variables take precedence over .env values.
+    env_file:
+      - .env
+    environment:
+      # Host-independent defaults baked into the image; .env may override these.
+      SQLITE_PATH: /data/bot.db
+      TEMP_ROOT: /tmp/podcast
+    volumes:
+      # Persistent SQLite database and app data.
+      - podcast-data:/data
+      # faster-whisper model cache so the model downloads once and is reused.
+      - podcast-model-cache:/home/podcast/.cache/huggingface
+    # Graceful shutdown: the bot listens for SIGTERM and drains loops.
+    stop_grace_period: 30s
+
+volumes:
+  podcast-data:
+  podcast-model-cache:
