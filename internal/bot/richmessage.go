@@ -37,14 +37,22 @@ func NewRichMessageClient(token string) richMessageSender {
 // summary. The metadata header (when present) renders as bold lines outside
 // the collapsible block so it stays visible; the entire summary body is
 // wrapped in a single <details><summary>…</summary>…</details> that is
-// collapsed by default. Each detected section renders as a bold title line
-// followed by its body (paragraphs/bullets); sections are not individually
-// collapsible. When the five investment sections cannot be detected, the
-// whole trimmed summary is rendered inside the collapsible block.
+// collapsed by default. Each detected section renders as an <h3> heading
+// followed by its body (paragraphs/lists/preformatted blocks); sections are
+// not individually collapsible. When the five investment sections cannot be
+// detected, the whole trimmed summary is rendered inside the collapsible
+// block.
+//
+// Rich messages render as real HTML, where bare newlines collapse to spaces.
+// Block-level elements (<h3>, <p>, <ul>, <pre>) are therefore required to
+// separate titles, paragraphs, and list items visually.
 func renderSummaryRichHTML(summary string, metadata display.SummaryMetadata) string {
 	var b strings.Builder
 	if header := renderSummaryMetadataHeaderHTML(metadata); header != "" {
-		b.WriteString(header)
+		// The shared header joins lines with "\n", which the legacy
+		// parse_mode=HTML path needs (newlines are line breaks there).
+		// In rich HTML newlines collapse, so convert to <br>.
+		b.WriteString(strings.ReplaceAll(header, "\n", "<br>"))
 		b.WriteString("\n\n")
 	}
 
@@ -67,76 +75,118 @@ func renderSummaryRichBodyHTML(summary string) string {
 
 	sections, _, ok := detectSummarySections(summary)
 	if !ok {
-		return renderRichParagraphsHTML(summary)
+		return renderRichBlocksHTML(summary)
 	}
 
 	var b strings.Builder
 	for i, section := range sections {
 		if i > 0 {
-			b.WriteString("\n\n")
+			b.WriteString("\n")
 		}
-		b.WriteString("<b>")
+		b.WriteString("<h3>")
 		b.WriteString(html.EscapeString(strings.TrimSpace(section.Title)))
-		b.WriteString("</b>\n")
-		b.WriteString(renderRichSectionBodyHTML(section.Body))
+		b.WriteString("</h3>")
+		b.WriteString(renderRichBlocksHTML(section.Body))
 	}
 	return b.String()
 }
 
-// renderRichSectionBodyHTML renders a section body as rich-message HTML,
-// preserving fenced code blocks verbatim and converting markdown
-// headings/bullets/inline formatting. Fenced blocks are escaped and emitted
-// as <pre> so their content stays literal; markdown inside fences is not
-// reformatted.
-func renderRichSectionBodyHTML(body string) string {
-	body = strings.ReplaceAll(body, "\r\n", "\n")
-	lines := strings.Split(body, "\n")
+// renderRichBlocksHTML renders markdown text as a sequence of rich-message
+// block elements: consecutive bullet lines become <ul><li>…</li></ul>,
+// consecutive prose lines separated by blank lines become <p>…</p>, fenced
+// code blocks become <pre>…</pre> (escaped, verbatim), and markdown headings
+// become <h4>. Inline formatting (bold/italic/code) is applied within <p>
+// and <li> via renderMarkdownInlineHTML.
+func renderRichBlocksHTML(text string) string {
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	lines := strings.Split(text, "\n")
+
+	var b strings.Builder
+	var prose []string
+	var bullets []string
 	fenceLen := 0
-	var out strings.Builder
-	first := true
-	for _, line := range lines {
-		if fenceLen == 0 {
-			if markerLen, ok := openingFenceLine(line); ok {
-				fenceLen = markerLen
-				if !first {
-					out.WriteString("\n")
-				}
-				out.WriteString("<pre>")
-				out.WriteString(html.EscapeString(line))
-				out.WriteString("\n")
-				first = false
-				continue
+
+	flushProse := func() {
+		if len(prose) == 0 {
+			return
+		}
+		b.WriteString("<p>")
+		for i, line := range prose {
+			if i > 0 {
+				b.WriteString("<br>")
 			}
-		} else {
-			out.WriteString(html.EscapeString(line))
-			out.WriteString("\n")
+			b.WriteString(renderMarkdownInlineHTML(strings.TrimSpace(line)))
+		}
+		b.WriteString("</p>")
+		prose = prose[:0]
+	}
+
+	flushBullets := func() {
+		if len(bullets) == 0 {
+			return
+		}
+		b.WriteString("<ul>")
+		for _, item := range bullets {
+			b.WriteString("<li>")
+			if item == "" {
+				b.WriteString("•")
+			} else {
+				b.WriteString(renderMarkdownInlineHTML(item))
+			}
+			b.WriteString("</li>")
+		}
+		b.WriteString("</ul>")
+		bullets = bullets[:0]
+	}
+
+	for _, line := range lines {
+		if fenceLen > 0 {
+			b.WriteString(html.EscapeString(line))
+			b.WriteString("\n")
 			if closingFenceLine(line, fenceLen) {
-				out.WriteString("</pre>")
+				b.WriteString("</pre>")
 				fenceLen = 0
 			}
 			continue
 		}
-
-		rendered := renderSummaryMarkdownLineHTML(line)
-		if rendered == "" {
+		if markerLen, ok := openingFenceLine(line); ok {
+			flushProse()
+			flushBullets()
+			b.WriteString("<pre>")
+			b.WriteString(html.EscapeString(line))
+			b.WriteString("\n")
+			fenceLen = markerLen
 			continue
 		}
-		if !first {
-			out.WriteString("\n")
-		}
-		out.WriteString(rendered)
-		first = false
-	}
-	if fenceLen > 0 {
-		out.WriteString("</pre>")
-	}
-	return out.String()
-}
 
-// renderRichParagraphsHTML renders free-form (non-sectioned) summary text as
-// rich-message HTML paragraphs/bullets, preserving fenced code blocks.
-func renderRichParagraphsHTML(text string) string {
-	return renderRichSectionBodyHTML(text)
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			flushProse()
+			flushBullets()
+			continue
+		}
+		if item, ok := markdownBullet(trimmed); ok {
+			flushProse()
+			bullets = append(bullets, item)
+			continue
+		}
+		if heading, ok := markdownHeading(trimmed); ok {
+			flushProse()
+			flushBullets()
+			b.WriteString("<h4>")
+			b.WriteString(renderMarkdownInlineHTML(heading))
+			b.WriteString("</h4>")
+			continue
+		}
+		flushBullets()
+		prose = append(prose, line)
+	}
+	flushProse()
+	flushBullets()
+	if fenceLen > 0 {
+		b.WriteString("</pre>")
+	}
+	return b.String()
 }
 
 // richMessageClient implements richMessageSender with direct HTTP POST calls

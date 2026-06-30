@@ -23,10 +23,10 @@ func TestRenderSummaryRichHTMLWrapsSectionsInOneDetails(t *testing.T) {
 	if !strings.Contains(html, "<summary>摘要</summary>") {
 		t.Fatalf("missing summary label: %s", html)
 	}
-	// Sections are bold titles, not individually collapsible.
+	// Sections render as <h3> headings, not individually collapsible.
 	for _, title := range expectedSummarySectionTitles {
-		if !strings.Contains(html, "<b>"+title+"</b>") {
-			t.Fatalf("missing section title %q: %s", title, html)
+		if !strings.Contains(html, "<h3>"+title+"</h3>") {
+			t.Fatalf("missing section heading %q: %s", title, html)
 		}
 	}
 	if strings.Count(html, "<blockquote") != 0 {
@@ -50,18 +50,23 @@ func TestRenderSummaryRichHTMLPlacesMetadataOutsideDetails(t *testing.T) {
 	if !strings.Contains(header, "<b>新 Podcast 更新</b>") || !strings.Contains(header, "播客：Pod &lt;X&gt;") || !strings.Contains(header, "链接：https://example.com/?a=1&amp;b=2") {
 		t.Fatalf("metadata header missing or unescaped: %s", header)
 	}
+	// Metadata lines must be separated by <br>, not bare newlines, so they
+	// do not collapse into one line in rich HTML.
+	if !strings.Contains(header, "<br>") {
+		t.Fatalf("metadata header lines not <br>-separated: %s", header)
+	}
 	// The summary body lives inside <details>.
-	if !strings.Contains(html[detailsIdx:], "<b>核心摘要</b>") {
-		t.Fatalf("section title not inside details: %s", html[detailsIdx:])
+	if !strings.Contains(html[detailsIdx:], "<h3>核心摘要</h3>") {
+		t.Fatalf("section heading not inside details: %s", html[detailsIdx:])
 	}
 }
 
 func TestRenderSummaryRichHTMLFallsBackToParagraphs(t *testing.T) {
 	html := renderSummaryRichHTML("This is prose.\n- a bullet", display.SummaryMetadata{})
-	if !strings.Contains(html, "<details>") || !strings.Contains(html, "This is prose.") || !strings.Contains(html, "• a bullet") {
-		t.Fatalf("fallback rich HTML missing body: %s", html)
+	if !strings.Contains(html, "<details>") || !strings.Contains(html, "<p>This is prose.</p>") || !strings.Contains(html, "<ul><li>a bullet</li></ul>") {
+		t.Fatalf("fallback rich HTML missing block body: %s", html)
 	}
-	if strings.Contains(html, "<b>核心摘要</b>") {
+	if strings.Contains(html, "<h3>核心摘要</h3>") {
 		t.Fatalf("fallback should not synthesize section titles: %s", html)
 	}
 }
@@ -69,7 +74,7 @@ func TestRenderSummaryRichHTMLFallsBackToParagraphs(t *testing.T) {
 func TestRenderSummaryRichHTMLRendersInlineMarkdown(t *testing.T) {
 	summary := simplifiedInvestmentSummary("- **bold** and *italic* with `code`", "missed", "explicit", "implicit", "stocks")
 	html := renderSummaryRichHTML(summary, display.SummaryMetadata{})
-	if !strings.Contains(html, "• <b>bold</b>") || !strings.Contains(html, "<i>italic</i>") {
+	if !strings.Contains(html, "<ul><li><b>bold</b> and <i>italic</i> with code</li></ul>") {
 		t.Fatalf("inline markdown not rendered: %s", html)
 	}
 	if strings.Contains(html, "<code>") {
@@ -88,6 +93,26 @@ func TestRenderSummaryRichHTMLPreservesFencedBlocks(t *testing.T) {
 	}
 	if strings.Contains(html, "<b>not a heading</b>") || strings.Contains(html, "<b>literal</b>") {
 		t.Fatalf("fenced markdown was reformatted: %s", html)
+	}
+	// Prose around the fence is wrapped in <p>.
+	if !strings.Contains(html, "<p>before</p>") || !strings.Contains(html, "<p>after</p>") {
+		t.Fatalf("prose around fenced block not wrapped in <p>: %s", html)
+	}
+}
+
+func TestRenderSummaryRichHTMLGroupsBulletsIntoList(t *testing.T) {
+	summary := simplifiedInvestmentSummary("- one\n- two\n- three", "missed", "explicit", "implicit", "stocks")
+	html := renderSummaryRichHTML(summary, display.SummaryMetadata{})
+	if !strings.Contains(html, "<ul><li>one</li><li>two</li><li>three</li></ul>") {
+		t.Fatalf("consecutive bullets should group into one <ul>: %s", html)
+	}
+}
+
+func TestRenderSummaryRichHTMLSeparatesParagraphsByBlankLines(t *testing.T) {
+	summary := simplifiedInvestmentSummary("first paragraph\n\nsecond paragraph", "missed", "explicit", "implicit", "stocks")
+	html := renderSummaryRichHTML(summary, display.SummaryMetadata{})
+	if !strings.Contains(html, "<p>first paragraph</p>") || !strings.Contains(html, "<p>second paragraph</p>") {
+		t.Fatalf("blank-line-separated prose should become distinct <p> blocks: %s", html)
 	}
 }
 
