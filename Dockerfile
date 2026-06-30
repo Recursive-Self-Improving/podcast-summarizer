@@ -33,8 +33,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Create /data as root and hand it to the non-root user so the named volume
 # (which Docker mounts as root-owned by default) is writable at first run.
 RUN useradd --create-home --uid 1000 podcast \
-    && mkdir -p /data /tmp/podcast \
-    && chown -R podcast:podcast /data /tmp/podcast
+    && mkdir -p /data /tmp/podcast /home/podcast/.cache/huggingface \
+    && chown -R podcast:podcast /data /tmp/podcast /home/podcast/.cache
 USER podcast
 WORKDIR /home/podcast
 
