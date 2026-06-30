@@ -1,0 +1,27 @@
+# Local environment files
+.env
+.env.*
+
+# SQLite data
+*.db
+*.db-*
+data/
+
+# Temporary output
+tmp/
+temp/
+*.tmp
+.claude/*.local.md
+
+# Python caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Go build artifacts
+/bin/
+*.test
+*.out
+coverage.out

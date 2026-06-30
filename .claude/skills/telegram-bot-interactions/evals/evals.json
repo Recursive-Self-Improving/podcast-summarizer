@@ -1,0 +1,23 @@
+{
+  "skill_name": "telegram-bot-interactions",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "给 Telegram bot 的 /summarize 命令加一个交互式输入模式：用户带 URL 参数时直接执行，没带参数时用 ForceReply 问 URL；用户回复后继续跑总结。顺便保证普通无关文字不会触发处理。",
+      "expected_output": "Implementation plan or code changes that support both direct args and ForceReply replies, validate reply chat/user/prompt identity, and keep unrelated default-handler text quiet.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "现在总结任务跑得比较久，Telegram 用户看起来像卡死了。帮我改成处理中会发多个中间状态，最后结果发出去后把这些中间状态消息删掉，不要删最终结果。",
+      "expected_output": "Implementation plan or code changes that send phase-specific progress messages, track message IDs, clean up transient statuses after final success/error, and test cleanup boundaries.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "把 Telegram 的总结输出改成 expandable blockquote。注意我们用 ParseModeHTML，不能让用户看到 raw markdown；代码块里的 ## 和列表符号要原样显示，普通正文里的标题、列表、粗体要转成 Telegram 能显示的 HTML。",
+      "expected_output": "Implementation plan or code changes that convert Markdown-like summary bodies to Telegram-safe HTML for expandable blockquotes, escape text, preserve fenced code literally, avoid unsupported code tags inside blockquotes, and test rendering edge cases.",
+      "files": []
+    }
+  ]
+}
