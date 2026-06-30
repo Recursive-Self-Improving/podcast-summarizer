@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/Recursive-Self-Improving/podcast-summarizer/internal/commandrunner"
@@ -75,6 +76,24 @@ func TestDownloaderPassesYTDLPArgs(t *testing.T) {
 	if !slices.Equal(runner.calls[0][:2], extraArgs) {
 		t.Fatalf("call args = %#v", runner.calls[0])
 	}
+}
+
+func TestDownloaderUsesExtensionOutputTemplate(t *testing.T) {
+	runner := &subtitleRunner{mode: "manual"}
+
+	_, err := Downloader{Runner: runner, TempRoot: t.TempDir()}.Download(context.Background(), "https://www.youtube.com/watch?v=abcDEF123_4")
+	if err != nil {
+		t.Fatalf("Download returned error: %v", err)
+	}
+	for i, arg := range runner.calls[0] {
+		if arg == "-o" && i+1 < len(runner.calls[0]) {
+			if filepath.Base(runner.calls[0][i+1]) != "subtitle.%(ext)s" {
+				t.Fatalf("output template = %q", runner.calls[0][i+1])
+			}
+			return
+		}
+	}
+	t.Fatalf("missing output template in %#v", runner.calls[0])
 }
 
 func TestDownloaderUsesLanguagePreferenceOrder(t *testing.T) {
@@ -151,7 +170,7 @@ func (r *subtitleRunner) Run(_ context.Context, _ string, args ...string) (comma
 func outputPrefix(args []string) string {
 	for i, arg := range args {
 		if arg == "-o" && i+1 < len(args) {
-			return args[i+1]
+			return strings.TrimSuffix(args[i+1], ".%(ext)s")
 		}
 	}
 	return ""

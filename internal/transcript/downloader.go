@@ -92,7 +92,7 @@ func (d Downloader) tryDownload(ctx context.Context, runner commandrunner.Runner
 		"--sub-format", "srt/vtt/best",
 		"--convert-subs", "srt",
 		"--skip-download",
-		"-o", prefix,
+		"-o", prefix+".%(ext)s",
 		canonicalURL,
 	)
 	_, runErr := runner.Run(ctx, ytdlp, args...)
