@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"os/signal"
 	"syscall"
 	"time"
@@ -41,6 +42,10 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("config error: %w", err)
 	}
+	if err := validateExecutableDeps(cfg); err != nil {
+		return err
+	}
+
 	if cfg.TempRoot != "" {
 		if err := os.MkdirAll(cfg.TempRoot, 0o755); err != nil {
 			return fmt.Errorf("create temp root: %w", err)
@@ -234,6 +239,22 @@ func runWatchLoop(ctx context.Context, watchService service.WatchService, logger
 		case <-timer.C:
 		}
 	}
+}
+
+func validateExecutableDeps(cfg config.Config) error {
+	for _, dep := range []struct {
+		name string
+		path string
+	}{
+		{name: "YT_DLP_PATH", path: cfg.YTDLPPath},
+		{name: "FFMPEG_PATH", path: cfg.FFmpegPath},
+		{name: "PYTHON_PATH", path: cfg.PythonPath},
+	} {
+		if _, err := exec.LookPath(dep.path); err != nil {
+			return fmt.Errorf("%s executable %q not found in PATH: %w", dep.name, dep.path, err)
+		}
+	}
+	return nil
 }
 
 func isShutdownError(err error) bool {
