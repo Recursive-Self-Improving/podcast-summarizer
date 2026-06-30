@@ -113,7 +113,7 @@ func TestProgressNotifierFinalSummaryUsesNormalMessageForWatchRequest(t *testing
 	if !slices.Equal(sender.finalReplyTargets, []int64{0}) || !slices.Equal(sender.finalSummaries, []string{"summary"}) {
 		t.Fatalf("final summaries = %#v targets = %#v", sender.finalSummaries, sender.finalReplyTargets)
 	}
-	if len(sender.deleted) != 0 || len(repo.messages) != 1 || repo.messages[0].Kind != RequestMessageKindSummaryPart1 {
+	if len(sender.deleted) != 0 || len(repo.messages) != 1 || repo.messages[0].Kind != RequestMessageKindSummary {
 		t.Fatalf("deleted=%#v messages=%#v", sender.deleted, repo.messages)
 	}
 }

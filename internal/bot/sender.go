@@ -38,10 +38,20 @@ type forceReplySenderClient interface {
 	SendForceReply(ctx context.Context, chatID, replyToMessageID int64, text, placeholder string) (int64, error)
 }
 
+// richMessageSender sends and edits Telegram rich messages (Bot API 10.1)
+// via direct HTTP calls, bypassing go-telegram/bot which has no released
+// support for sendRichMessage. The Telegram InputRichMessage accepts an
+// html or markdown field; this implementation always uses html.
+type richMessageSender interface {
+	SendRichMessage(ctx context.Context, chatID, replyToMessageID int64, htmlText string, markup any) (int64, error)
+	EditRichMessage(ctx context.Context, chatID, messageID int64, htmlText string, markup any) error
+}
+
 type Sender struct {
-	Client  SenderClient
-	TempDir string
-	Logger  *slog.Logger
+	Client     SenderClient
+	RichSender richMessageSender
+	TempDir    string
+	Logger     *slog.Logger
 }
 
 func (s Sender) SendText(ctx context.Context, chatID int64, text string) error {
@@ -84,10 +94,31 @@ func (s Sender) SendFinalSummary(ctx context.Context, chatID, replyToMessageID i
 func (s Sender) SendFinalSummaryParts(ctx context.Context, chatID, replyToMessageID int64, text string, requestID int64, attrs ...any) ([]int64, error) {
 	return s.SendFinalSummaryPartsWithMetadata(ctx, chatID, replyToMessageID, text, requestID, display.SummaryMetadata{}, attrs...)
 }
-
 func (s Sender) SendFinalSummaryPartsWithMetadata(ctx context.Context, chatID, replyToMessageID int64, text string, requestID int64, metadata display.SummaryMetadata, attrs ...any) ([]int64, error) {
-	client, ok := s.Client.(htmlSenderClient)
 	plainFallback := summaryTextWithMetadata(text, metadata)
+	if s.RichSender != nil {
+		htmlText := renderSummaryRichHTML(text, metadata)
+		if runeLen(htmlText) > 0 && runeLen(htmlText) <= maxRichMessageChars {
+			messageID, err := s.RichSender.SendRichMessage(ctx, chatID, replyToMessageID, htmlText, summaryVariantKeyboard(requestID))
+			if err != nil {
+				s.logger().Warn("telegram rich message send failed", append([]any{"chat_id", chatID, "error", err}, attrs...)...)
+				if replyToMessageID != 0 && isMissingReplyTargetError(err) {
+					return s.SendFinalSummaryPartsWithMetadata(ctx, chatID, 0, text, requestID, metadata, attrs...)
+				}
+				if isMessageTooLongError(err) {
+					messageID, fallbackErr := s.sendDocumentFallback(ctx, chatID, replyToMessageID, plainFallback, attrs)
+					if fallbackErr != nil {
+						return nil, fallbackErr
+					}
+					return []int64{messageID}, nil
+				}
+				return nil, newSendError("send rich summary", err, 0)
+			}
+			return []int64{messageID}, nil
+		}
+	}
+
+	client, ok := s.Client.(htmlSenderClient)
 	if !ok {
 		messageID, err := s.sendText(ctx, chatID, replyToMessageID, plainFallback, attrs)
 		if err != nil {
@@ -114,6 +145,25 @@ func (s Sender) EditFinalSummaryParts(ctx context.Context, chatID int64, message
 }
 
 func (s Sender) EditFinalSummaryPartsWithMetadata(ctx context.Context, chatID int64, messageIDs []int64, text string, requestID int64, metadata display.SummaryMetadata, attrs ...any) error {
+	if s.RichSender != nil && len(messageIDs) == 1 {
+		htmlText := renderSummaryRichHTML(text, metadata)
+		if runeLen(htmlText) == 0 {
+			return fmt.Errorf("summary variant content is empty")
+		}
+		if runeLen(htmlText) > maxRichMessageChars {
+			return fmt.Errorf("summary variant content too large to edit as a rich message")
+		}
+		err := s.RichSender.EditRichMessage(ctx, chatID, messageIDs[0], htmlText, summaryVariantKeyboard(requestID))
+		if err != nil {
+			if isMessageNotModifiedError(err) {
+				return nil
+			}
+			s.logger().Warn("telegram rich message edit failed", append([]any{"chat_id", chatID, "message_id", messageIDs[0], "error", err}, attrs...)...)
+			return err
+		}
+		return nil
+	}
+
 	client, ok := s.Client.(htmlEditorClient)
 	if !ok {
 		return fmt.Errorf("telegram html editor is required")

@@ -622,25 +622,7 @@ func (s SummaryService) sendFinalSummary(ctx context.Context, request db.Summary
 }
 
 func (s SummaryService) storeFinalSummaryMessages(ctx context.Context, request db.SummaryRequest, messageIDs []int64) error {
-	if len(messageIDs) == 0 {
-		return nil
-	}
-	kinds := []string{RequestMessageKindSummaryPart1, RequestMessageKindSummaryPart2}
-	for i, messageID := range messageIDs {
-		kind := fmt.Sprintf("summary_part_%d", i+1)
-		if i < len(kinds) {
-			kind = kinds[i]
-		}
-		if _, err := s.Repo.CreateSummaryRequestMessage(ctx, db.SummaryRequestMessage{
-			SummaryRequestID:  request.ID,
-			ChatID:            request.ChatID,
-			TelegramMessageID: messageID,
-			Kind:              kind,
-		}); err != nil {
-			return err
-		}
-	}
-	return nil
+	return storeSummaryRequestMessages(ctx, s.Repo, request, messageIDs)
 }
 
 func (s SummaryService) SwitchSummaryVariant(ctx context.Context, command SwitchSummaryVariantCommand) error {
@@ -661,7 +643,7 @@ func (s SummaryService) SwitchSummaryVariant(ctx context.Context, command Switch
 	if request.ChatID != command.ChatID {
 		return errors.New("summary variant callback chat mismatch")
 	}
-	messages, err := s.Repo.ListActiveSummaryRequestMessagesByKind(ctx, request.ID, []string{RequestMessageKindSummaryPart1, RequestMessageKindSummaryPart2})
+	messages, err := s.Repo.ListActiveSummaryRequestMessagesByKind(ctx, request.ID, []string{RequestMessageKindSummary, RequestMessageKindSummaryPart1, RequestMessageKindSummaryPart2})
 	if err != nil {
 		return err
 	}
@@ -669,7 +651,11 @@ func (s SummaryService) SwitchSummaryVariant(ctx context.Context, command Switch
 	if !ok {
 		return errors.New("stored summary messages are incomplete")
 	}
-	if command.MessageID != messageIDs[1] {
+	// The variant buttons live on the final summary message: the single
+	// rich message (messageIDs[0] when one message) or the second legacy
+	// part (messageIDs[1] when two messages).
+	buttonMessageID := messageIDs[len(messageIDs)-1]
+	if command.MessageID != buttonMessageID {
 		return errors.New("summary variant callback message mismatch")
 	}
 	media, err := s.Repo.GetMedia(ctx, request.MediaItemID)
@@ -701,14 +687,20 @@ func (s SummaryService) SwitchSummaryVariant(ctx context.Context, command Switch
 }
 
 func summaryPartMessageIDs(messages []db.SummaryRequestMessage) ([]int64, bool) {
+	var single int64
 	ids := make([]int64, 2)
 	for _, message := range messages {
 		switch message.Kind {
+		case RequestMessageKindSummary:
+			single = message.TelegramMessageID
 		case RequestMessageKindSummaryPart1:
 			ids[0] = message.TelegramMessageID
 		case RequestMessageKindSummaryPart2:
 			ids[1] = message.TelegramMessageID
 		}
+	}
+	if single != 0 {
+		return []int64{single}, true
 	}
 	return ids, ids[0] != 0 && ids[1] != 0
 }

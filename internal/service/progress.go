@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 
@@ -13,6 +14,7 @@ import (
 const (
 	RequestMessageKindProgress     = "progress"
 	RequestMessageKindNotice       = "notice"
+	RequestMessageKindSummary      = "summary"
 	RequestMessageKindSummaryPart1 = "summary_part_1"
 	RequestMessageKindSummaryPart2 = "summary_part_2"
 )
@@ -25,6 +27,50 @@ type ProgressRepository interface {
 	ListActiveSummaryRequestMessages(ctx context.Context, requestIDs []int64) ([]db.SummaryRequestMessage, error)
 	MarkSummaryRequestMessageDeleted(ctx context.Context, id int64) error
 	MarkSummaryRequestMessagesDeleted(ctx context.Context, ids []int64) error
+}
+
+// summaryMessageCreator is the minimal repository surface for persisting
+// Telegram message IDs associated with a summary request. It is shared by
+// ProgressNotifier.storeFinalSummaryMessages and
+// SummaryService.storeFinalSummaryMessages so the single/dual kind policy
+// lives in exactly one place.
+type summaryMessageCreator interface {
+	CreateSummaryRequestMessage(ctx context.Context, message db.SummaryRequestMessage) (db.SummaryRequestMessage, error)
+}
+
+// storeSummaryRequestMessages persists the Telegram message IDs produced when
+// a final summary is delivered. A single message (the rich-message case) is
+// stored with kind RequestMessageKindSummary; two messages (the legacy HTML
+// fallback) are stored as summary_part_1/summary_part_2.
+func storeSummaryRequestMessages(ctx context.Context, repo summaryMessageCreator, request db.SummaryRequest, messageIDs []int64) error {
+	if len(messageIDs) == 0 {
+		return nil
+	}
+	if len(messageIDs) == 1 {
+		_, err := repo.CreateSummaryRequestMessage(ctx, db.SummaryRequestMessage{
+			SummaryRequestID:  request.ID,
+			ChatID:            request.ChatID,
+			TelegramMessageID: messageIDs[0],
+			Kind:              RequestMessageKindSummary,
+		})
+		return err
+	}
+	kinds := []string{RequestMessageKindSummaryPart1, RequestMessageKindSummaryPart2}
+	for i, messageID := range messageIDs {
+		kind := fmt.Sprintf("summary_part_%d", i+1)
+		if i < len(kinds) {
+			kind = kinds[i]
+		}
+		if _, err := repo.CreateSummaryRequestMessage(ctx, db.SummaryRequestMessage{
+			SummaryRequestID:  request.ID,
+			ChatID:            request.ChatID,
+			TelegramMessageID: messageID,
+			Kind:              kind,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type ReplyingSender interface {
@@ -221,24 +267,7 @@ func (n ProgressNotifier) sendFinalReply(ctx context.Context, request db.Summary
 }
 
 func (n ProgressNotifier) storeFinalSummaryMessages(ctx context.Context, request db.SummaryRequest, messageIDs []int64) error {
-	kinds := []string{RequestMessageKindSummaryPart1, RequestMessageKindSummaryPart2}
-	for i, messageID := range messageIDs {
-		kind := ""
-		if i < len(kinds) {
-			kind = kinds[i]
-		} else {
-			kind = "summary_part_" + string(rune('1'+i))
-		}
-		if _, err := n.Repo.CreateSummaryRequestMessage(ctx, db.SummaryRequestMessage{
-			SummaryRequestID:  request.ID,
-			ChatID:            request.ChatID,
-			TelegramMessageID: messageID,
-			Kind:              kind,
-		}); err != nil {
-			return err
-		}
-	}
-	return nil
+	return storeSummaryRequestMessages(ctx, n.Repo, request, messageIDs)
 }
 
 func (n ProgressNotifier) validate() error {

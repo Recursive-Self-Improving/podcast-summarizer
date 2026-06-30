@@ -87,7 +87,12 @@ func run(logger *slog.Logger) error {
 		return fmt.Errorf("initialize telegram bot: %w", err)
 	}
 
-	sender := botpkg.Sender{Client: botpkg.TelegramSenderClient{Bot: telegramBot}, TempDir: cfg.TempRoot, Logger: logger.With("component", "telegram_sender")}
+	sender := botpkg.Sender{
+		Client:     botpkg.TelegramSenderClient{Bot: telegramBot},
+		RichSender: botpkg.NewRichMessageClient(cfg.TelegramBotToken),
+		TempDir:    cfg.TempRoot,
+		Logger:     logger.With("component", "telegram_sender"),
+	}
 	progressNotifier := service.ProgressNotifier{Repo: repo, Sender: sender, Logger: logger.With("component", "progress_notifier")}
 	llm := summarize.NewOpenAIResponses(cfg.OpenAIBaseURL, cfg.OpenAIAPIKey, cfg.OpenAIModel)
 	summaryService := service.SummaryService{
