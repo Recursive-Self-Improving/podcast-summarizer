@@ -13,28 +13,28 @@ import (
 type CommandName string
 
 const (
-	CommandSummarize        CommandName = "summarize_podcast"
-	CommandStatus           CommandName = "summary_status"
-	CommandSubscribePodcast CommandName = "subscribe_podcast"
-	CommandUnsubscribePodcast      CommandName = "unsubscribe_podcast"
-	CommandSubscriptions    CommandName = "subscriptions"
-	CommandAllowGroup       CommandName = "allow_group"
-	CommandRemoveGroup      CommandName = "remove_group"
-	CommandAllowUser        CommandName = "allow_user"
-	CommandRemoveUser       CommandName = "remove_user"
-	CommandWhitelist        CommandName = "whitelist"
+	CommandSummarize          CommandName = "summarize_podcast"
+	CommandStatus             CommandName = "summary_status"
+	CommandSubscribePodcast   CommandName = "subscribe_podcast"
+	CommandUnsubscribePodcast CommandName = "unsubscribe_podcast"
+	CommandSubscriptions      CommandName = "subscriptions"
+	CommandAllowGroup         CommandName = "allow_group"
+	CommandRemoveGroup        CommandName = "remove_group"
+	CommandAllowUser          CommandName = "allow_user"
+	CommandRemoveUser         CommandName = "remove_user"
+	CommandWhitelist          CommandName = "whitelist"
 )
 
 type Command struct {
-	Name      CommandName
-	URL       string
-	HasURL    bool
-	Prompt    string
-	HasPrompt bool
-	ChatID    int64
-	UserID    int64
-	HasChatID bool
-	HasUserID bool
+	Name           CommandName
+	URL            string
+	HasURL         bool
+	Prompt         string
+	HasPrompt      bool
+	ChatIDs        []int64
+	SkippedChatIDs []string
+	UserID         int64
+	HasUserID      bool
 }
 
 func ParseCommand(text string) (Command, error) {
@@ -64,9 +64,9 @@ func ParseCommand(text string) (Command, error) {
 		}
 		return Command{Name: CommandSubscriptions}, nil
 	case CommandAllowGroup:
-		return parseOptionalChatID(CommandAllowGroup, rest)
+		return parseOptionalChatIDs(CommandAllowGroup, rest)
 	case CommandRemoveGroup:
-		return parseOptionalChatID(CommandRemoveGroup, rest)
+		return parseOptionalChatIDs(CommandRemoveGroup, rest)
 	case CommandAllowUser:
 		return parseRequiredUserID(CommandAllowUser, rest)
 	case CommandRemoveUser:
@@ -113,19 +113,29 @@ func parseRequiredURL(name CommandName, rest string) (Command, error) {
 	return Command{Name: name, URL: url, HasURL: true}, nil
 }
 
-func parseOptionalChatID(name CommandName, rest string) (Command, error) {
+func parseOptionalChatIDs(name CommandName, rest string) (Command, error) {
 	rest = strings.TrimSpace(rest)
 	if rest == "" {
 		return Command{Name: name}, nil
 	}
-	if strings.ContainsAny(rest, " \t\n") {
-		return Command{}, fmt.Errorf("usage: /%s [chat_id]", name)
+	var chatIDs []int64
+	var skipped []string
+	for _, token := range strings.Split(rest, ",") {
+		token = strings.TrimSpace(token)
+		if token == "" {
+			continue
+		}
+		chatID, err := strconv.ParseInt(token, 10, 64)
+		if err != nil {
+			skipped = append(skipped, token)
+			continue
+		}
+		chatIDs = append(chatIDs, chatID)
 	}
-	chatID, err := strconv.ParseInt(rest, 10, 64)
-	if err != nil {
-		return Command{}, fmt.Errorf("chat_id must be numeric: %w", err)
+	if len(chatIDs) == 0 {
+		return Command{}, fmt.Errorf("chat_id must be numeric: %s", strings.Join(skipped, ", "))
 	}
-	return Command{Name: name, ChatID: chatID, HasChatID: true}, nil
+	return Command{Name: name, ChatIDs: chatIDs, SkippedChatIDs: skipped}, nil
 }
 
 func parseRequiredUserID(name CommandName, rest string) (Command, error) {

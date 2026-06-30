@@ -431,28 +431,32 @@ func (h Handler) handleWhitelistCommand(ctx context.Context, message Message, co
 
 	switch command.Name {
 	case CommandAllowGroup:
-		chatID, err := groupChatID(message, command)
+		chatIDs, err := groupChatIDs(message, command)
 		if err != nil {
 			return h.reply(ctx, message, err.Error())
 		}
-		group := db.WhitelistedGroup{
-			ChatID:          chatID,
-			Title:           message.ChatTitle,
-			CreatedByUserID: message.UserID,
+		for _, chatID := range chatIDs {
+			group := db.WhitelistedGroup{
+				ChatID:          chatID,
+				Title:           message.ChatTitle,
+				CreatedByUserID: message.UserID,
+			}
+			if err := h.Whitelist.UpsertWhitelistedGroup(ctx, group); err != nil {
+				return err
+			}
 		}
-		if err := h.Whitelist.UpsertWhitelistedGroup(ctx, group); err != nil {
-			return err
-		}
-		return h.reply(ctx, message, fmt.Sprintf("Allowed group %d.", chatID))
+		return h.reply(ctx, message, groupReply("Allowed", chatIDs, command.SkippedChatIDs))
 	case CommandRemoveGroup:
-		chatID, err := groupChatID(message, command)
+		chatIDs, err := groupChatIDs(message, command)
 		if err != nil {
 			return h.reply(ctx, message, err.Error())
 		}
-		if err := h.Whitelist.RemoveWhitelistedGroup(ctx, chatID); err != nil {
-			return err
+		for _, chatID := range chatIDs {
+			if err := h.Whitelist.RemoveWhitelistedGroup(ctx, chatID); err != nil {
+				return err
+			}
 		}
-		return h.reply(ctx, message, fmt.Sprintf("Removed group %d.", chatID))
+		return h.reply(ctx, message, groupReply("Removed", chatIDs, command.SkippedChatIDs))
 	case CommandAllowUser:
 		user := db.WhitelistedDMUser{
 			UserID:          command.UserID,
@@ -478,14 +482,49 @@ func (h Handler) handleWhitelistCommand(ctx context.Context, message Message, co
 	}
 }
 
-func groupChatID(message Message, command Command) (int64, error) {
-	if command.HasChatID {
-		return command.ChatID, nil
+func groupChatIDs(message Message, command Command) ([]int64, error) {
+	if len(command.ChatIDs) > 0 {
+		return dedupeChatIDs(command.ChatIDs), nil
 	}
 	if message.ChatType != auth.ChatTypeGroup && message.ChatType != auth.ChatTypeSupergroup {
-		return 0, fmt.Errorf("usage: /%s [chat_id]", command.Name)
+		return nil, fmt.Errorf("usage: /%s [chat_id]", command.Name)
 	}
-	return message.ChatID, nil
+	return []int64{message.ChatID}, nil
+}
+
+func dedupeChatIDs(chatIDs []int64) []int64 {
+	seen := make(map[int64]bool, len(chatIDs))
+	unique := make([]int64, 0, len(chatIDs))
+	for _, id := range chatIDs {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		unique = append(unique, id)
+	}
+	return unique
+}
+
+func formatChatIDs(chatIDs []int64) string {
+	parts := make([]string, len(chatIDs))
+	for i, id := range chatIDs {
+		parts[i] = strconv.FormatInt(id, 10)
+	}
+	return strings.Join(parts, ", ")
+}
+
+func groupReply(verb string, chatIDs []int64, skipped []string) string {
+	var prefix string
+	if len(chatIDs) == 1 {
+		prefix = fmt.Sprintf("%s group %d", verb, chatIDs[0])
+	} else {
+		prefix = verb + " groups: " + formatChatIDs(chatIDs)
+	}
+	text := prefix + "."
+	if len(skipped) > 0 {
+		text += " Skipped: " + strings.Join(skipped, ", ") + "."
+	}
+	return text
 }
 
 func (h Handler) whitelistText(ctx context.Context) (string, error) {

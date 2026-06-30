@@ -600,6 +600,78 @@ func TestHandlerAllowsExplicitGroupAndUser(t *testing.T) {
 	}
 }
 
+func TestHandlerAllowsMultipleGroups(t *testing.T) {
+	sender := &fakeMessageSender{}
+	whitelist := newFakeWhitelist()
+	handler := Handler{Auth: &fakeAuthorizer{owner: true}, Whitelist: whitelist, Sender: sender}
+
+	if err := handler.HandleMessage(context.Background(), testMessage("/allow_group -200,-300")); err != nil {
+		t.Fatalf("allow groups returned error: %v", err)
+	}
+	if _, ok := whitelist.groups[-200]; !ok {
+		t.Fatalf("groups = %#v", whitelist.groups)
+	}
+	if _, ok := whitelist.groups[-300]; !ok {
+		t.Fatalf("groups = %#v", whitelist.groups)
+	}
+	if len(sender.messages) != 1 || !strings.Contains(sender.messages[0], "Allowed groups: -200, -300") {
+		t.Fatalf("messages = %#v", sender.messages)
+	}
+}
+
+func TestHandlerAllowsMultipleGroupsSkipsInvalid(t *testing.T) {
+	sender := &fakeMessageSender{}
+	whitelist := newFakeWhitelist()
+	handler := Handler{Auth: &fakeAuthorizer{owner: true}, Whitelist: whitelist, Sender: sender}
+
+	if err := handler.HandleMessage(context.Background(), testMessage("/allow_group -200,bad,-300")); err != nil {
+		t.Fatalf("allow groups returned error: %v", err)
+	}
+	if _, ok := whitelist.groups[-200]; !ok {
+		t.Fatalf("groups = %#v", whitelist.groups)
+	}
+	if _, ok := whitelist.groups[-300]; !ok {
+		t.Fatalf("groups = %#v", whitelist.groups)
+	}
+	if len(sender.messages) != 1 || !strings.Contains(sender.messages[0], "Allowed groups: -200, -300") || !strings.Contains(sender.messages[0], "Skipped: bad") {
+		t.Fatalf("messages = %#v", sender.messages)
+	}
+}
+
+func TestHandlerAllowsDuplicateGroupsDeduped(t *testing.T) {
+	sender := &fakeMessageSender{}
+	whitelist := newFakeWhitelist()
+	handler := Handler{Auth: &fakeAuthorizer{owner: true}, Whitelist: whitelist, Sender: sender}
+
+	if err := handler.HandleMessage(context.Background(), testMessage("/allow_group -200,-200")); err != nil {
+		t.Fatalf("allow groups returned error: %v", err)
+	}
+	if len(whitelist.groups) != 1 {
+		t.Fatalf("groups = %#v", whitelist.groups)
+	}
+	if len(sender.messages) != 1 || !strings.Contains(sender.messages[0], "Allowed group -200") {
+		t.Fatalf("messages = %#v", sender.messages)
+	}
+}
+
+func TestHandlerRemovesMultipleGroups(t *testing.T) {
+	sender := &fakeMessageSender{}
+	whitelist := newFakeWhitelist()
+	whitelist.groups[-200] = db.WhitelistedGroup{ChatID: -200}
+	whitelist.groups[-300] = db.WhitelistedGroup{ChatID: -300}
+	handler := Handler{Auth: &fakeAuthorizer{owner: true}, Whitelist: whitelist, Sender: sender}
+
+	if err := handler.HandleMessage(context.Background(), testMessage("/remove_group -200,-300")); err != nil {
+		t.Fatalf("remove groups returned error: %v", err)
+	}
+	if len(whitelist.groups) != 0 {
+		t.Fatalf("groups = %#v", whitelist.groups)
+	}
+	if len(sender.messages) != 1 || !strings.Contains(sender.messages[0], "Removed groups: -200, -300") {
+		t.Fatalf("messages = %#v", sender.messages)
+	}
+}
+
 func TestHandlerRemovesGroupAndUser(t *testing.T) {
 	sender := &fakeMessageSender{}
 	whitelist := newFakeWhitelist()

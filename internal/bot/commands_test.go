@@ -171,7 +171,7 @@ func TestParseOptionalGroupCommands(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ParseCommand(%q) returned error: %v", input, err)
 		}
-		if command.HasChatID {
+		if len(command.ChatIDs) != 0 {
 			t.Fatalf("command = %#v", command)
 		}
 	}
@@ -180,8 +180,53 @@ func TestParseOptionalGroupCommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseCommand returned error: %v", err)
 	}
-	if command.Name != CommandAllowGroup || !command.HasChatID || command.ChatID != -100 {
+	if command.Name != CommandAllowGroup || len(command.ChatIDs) != 1 || command.ChatIDs[0] != -100 {
 		t.Fatalf("command = %#v", command)
+	}
+}
+
+func TestParseOptionalGroupCommandsMultipleIDs(t *testing.T) {
+	command, err := ParseCommand("/allow_group -100,-200,-300")
+	if err != nil {
+		t.Fatalf("ParseCommand returned error: %v", err)
+	}
+	if command.Name != CommandAllowGroup || len(command.ChatIDs) != 3 || command.ChatIDs[0] != -100 || command.ChatIDs[1] != -200 || command.ChatIDs[2] != -300 {
+		t.Fatalf("command = %#v", command)
+	}
+	if len(command.SkippedChatIDs) != 0 {
+		t.Fatalf("skipped = %#v", command.SkippedChatIDs)
+	}
+}
+
+func TestParseOptionalGroupCommandsTrimsSpaces(t *testing.T) {
+	command, err := ParseCommand("/remove_group -100, -200 , -300")
+	if err != nil {
+		t.Fatalf("ParseCommand returned error: %v", err)
+	}
+	if len(command.ChatIDs) != 3 || command.ChatIDs[0] != -100 || command.ChatIDs[1] != -200 || command.ChatIDs[2] != -300 {
+		t.Fatalf("command = %#v", command)
+	}
+}
+
+func TestParseOptionalGroupCommandsSkipsInvalid(t *testing.T) {
+	command, err := ParseCommand("/allow_group -100,bad,-200")
+	if err != nil {
+		t.Fatalf("ParseCommand returned error: %v", err)
+	}
+	if len(command.ChatIDs) != 2 || command.ChatIDs[0] != -100 || command.ChatIDs[1] != -200 {
+		t.Fatalf("chatIDs = %#v", command.ChatIDs)
+	}
+	if len(command.SkippedChatIDs) != 1 || command.SkippedChatIDs[0] != "bad" {
+		t.Fatalf("skipped = %#v", command.SkippedChatIDs)
+	}
+}
+
+func TestParseOptionalGroupCommandsAllInvalidErrors(t *testing.T) {
+	for _, input := range []string{"/allow_group bad", "/allow_group bad,worse"} {
+		_, err := ParseCommand(input)
+		if err == nil {
+			t.Fatalf("ParseCommand(%q) expected error", input)
+		}
 	}
 }
 
