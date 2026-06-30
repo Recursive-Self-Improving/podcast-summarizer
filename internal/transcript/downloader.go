@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	subtitleLanguages    = "zh,zh-CN,zh-Hans,zh-TW,zh-Hant,en,en-US,en-GB"
+	subtitleLanguages    = "zh,zh-CN,zh-Hans,zh-TW,zh-Hant,en,en-US,en-GB,en-orig"
 	manualSubtitleSource = "manual_subtitle"
 	autoSubtitleSource   = "auto_subtitle"
 )
