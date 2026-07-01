@@ -13,20 +13,21 @@ import (
 	"github.com/Recursive-Self-Improving/podcast-summarizer/internal/display"
 )
 
-func TestRenderSummaryRichHTMLWrapsSectionsInOneDetails(t *testing.T) {
+func TestRenderSummaryRichHTMLMakesEachSectionCollapsible(t *testing.T) {
 	summary := simplifiedInvestmentSummary("A & B < C", "missed", "explicit", "implicit", "stocks")
 
 	html := renderSummaryRichHTML(summary, display.SummaryMetadata{})
-	if c := strings.Count(html, "<details>"); c != 1 {
-		t.Fatalf("details count = %d, want 1: %s", c, html)
+	// Each of the five sections is its own collapsible <details> block.
+	if c := strings.Count(html, "<details>"); c != len(expectedSummarySectionTitles) {
+		t.Fatalf("details count = %d, want %d: %s", c, len(expectedSummarySectionTitles), html)
 	}
-	if !strings.Contains(html, "<summary>摘要</summary>") {
-		t.Fatalf("missing summary label: %s", html)
+	// No outer "摘要" wrapper remains; section titles are the <summary> labels.
+	if strings.Contains(html, "<summary>摘要</summary>") {
+		t.Fatalf("rich HTML should not wrap sections under 摘要: %s", html)
 	}
-	// Sections render as <h3> headings, not individually collapsible.
 	for _, title := range expectedSummarySectionTitles {
-		if !strings.Contains(html, "<h3>"+title+"</h3>") {
-			t.Fatalf("missing section heading %q: %s", title, html)
+		if !strings.Contains(html, "<summary>"+title+"</summary>") {
+			t.Fatalf("missing section summary label %q: %s", title, html)
 		}
 	}
 	if strings.Count(html, "<blockquote") != 0 {
@@ -55,18 +56,18 @@ func TestRenderSummaryRichHTMLPlacesMetadataOutsideDetails(t *testing.T) {
 	if !strings.Contains(header, "<br>") {
 		t.Fatalf("metadata header lines not <br>-separated: %s", header)
 	}
-	// The summary body lives inside <details>.
-	if !strings.Contains(html[detailsIdx:], "<h3>核心摘要</h3>") {
-		t.Fatalf("section heading not inside details: %s", html[detailsIdx:])
+	// The first section's summary label lives inside the first <details>.
+	if !strings.Contains(html[detailsIdx:], "<summary>核心摘要</summary>") {
+		t.Fatalf("section summary label not inside details: %s", html[detailsIdx:])
 	}
 }
 
-func TestRenderSummaryRichHTMLFallsBackToParagraphs(t *testing.T) {
+func TestRenderSummaryRichHTMLFallsBackToSingleCollapsible(t *testing.T) {
 	html := renderSummaryRichHTML("This is prose.\n- a bullet", display.SummaryMetadata{})
-	if !strings.Contains(html, "<details>") || !strings.Contains(html, "<p>This is prose.</p>") || !strings.Contains(html, "<ul><li>a bullet</li></ul>") {
-		t.Fatalf("fallback rich HTML missing block body: %s", html)
+	if !strings.Contains(html, "<details>") || !strings.Contains(html, "<summary>摘要</summary>") || !strings.Contains(html, "<p>This is prose.</p>") || !strings.Contains(html, "<ul><li>a bullet</li></ul>") {
+		t.Fatalf("fallback rich HTML missing collapsible 摘要 block or body: %s", html)
 	}
-	if strings.Contains(html, "<h3>核心摘要</h3>") {
+	if strings.Contains(html, "<summary>核心摘要</summary>") {
 		t.Fatalf("fallback should not synthesize section titles: %s", html)
 	}
 }

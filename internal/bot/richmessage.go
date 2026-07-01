@@ -35,17 +35,18 @@ func NewRichMessageClient(token string) richMessageSender {
 
 // renderSummaryRichHTML builds the HTML body of a rich message for a podcast
 // summary. The metadata header (when present) renders as bold lines outside
-// the collapsible block so it stays visible; the entire summary body is
-// wrapped in a single <details><summary>…</summary>…</details> that is
-// collapsed by default. Each detected section renders as an <h3> heading
-// followed by its body (paragraphs/lists/preformatted blocks); sections are
-// not individually collapsible. When the five investment sections cannot be
-// detected, the whole trimmed summary is rendered inside the collapsible
-// block.
+// any collapsible block so it stays visible. Each detected investment section
+// renders as its own <details><summary>…</summary>…</details> block: the
+// section title is the always-visible, clickable summary line and the section
+// body (paragraphs/lists/preformatted blocks) is collapsed by default. This
+// keeps all five subtitles visible without expanding, while each section's
+// content stays collapsible. When the five investment sections cannot be
+// detected, the whole trimmed summary is wrapped in a single collapsible
+// <details><summary>摘要</summary> block as a fallback.
 //
 // Rich messages render as real HTML, where bare newlines collapse to spaces.
-// Block-level elements (<h3>, <p>, <ul>, <pre>) are therefore required to
-// separate titles, paragraphs, and list items visually.
+// Block-level elements (<details>/<summary>, <p>, <ul>, <pre>, <h4>) are
+// therefore required to separate titles, paragraphs, and list items visually.
 func renderSummaryRichHTML(summary string, metadata display.SummaryMetadata) string {
 	var b strings.Builder
 	if header := renderSummaryMetadataHeaderHTML(metadata); header != "" {
@@ -56,17 +57,15 @@ func renderSummaryRichHTML(summary string, metadata display.SummaryMetadata) str
 		b.WriteString("\n\n")
 	}
 
-	body := renderSummaryRichBodyHTML(summary)
-	b.WriteString("<details><summary>")
-	b.WriteString(html.EscapeString(richMessageSummaryLabel))
-	b.WriteString("</summary>")
-	b.WriteString(body)
-	b.WriteString("</details>")
+	b.WriteString(renderSummaryRichBodyHTML(summary))
 	return b.String()
 }
 
 // renderSummaryRichBodyHTML renders the summary body (without metadata) as
-// rich-message HTML inside the collapsible block.
+// rich-message HTML. When the five investment sections are detected, each
+// section becomes its own collapsible <details> block with the section title
+// as the <summary> label. Otherwise the whole body is wrapped in a single
+// collapsible block labeled "摘要".
 func renderSummaryRichBodyHTML(summary string) string {
 	summary = strings.ReplaceAll(strings.TrimSpace(summary), "\r\n", "\n")
 	if summary == "" {
@@ -75,7 +74,7 @@ func renderSummaryRichBodyHTML(summary string) string {
 
 	sections, _, ok := detectSummarySections(summary)
 	if !ok {
-		return renderRichBlocksHTML(summary)
+		return renderCollapsibleSection(richMessageSummaryLabel, summary)
 	}
 
 	var b strings.Builder
@@ -83,12 +82,16 @@ func renderSummaryRichBodyHTML(summary string) string {
 		if i > 0 {
 			b.WriteString("\n")
 		}
-		b.WriteString("<h3>")
-		b.WriteString(html.EscapeString(strings.TrimSpace(section.Title)))
-		b.WriteString("</h3>")
-		b.WriteString(renderRichBlocksHTML(section.Body))
+		b.WriteString(renderCollapsibleSection(section.Title, section.Body))
 	}
 	return b.String()
+}
+
+// renderCollapsibleSection wraps body in a <details><summary>title</summary>
+// block. The title is trimmed and HTML-escaped; the body is rendered as
+// rich-message block elements via renderRichBlocksHTML.
+func renderCollapsibleSection(title, body string) string {
+	return "<details><summary>" + html.EscapeString(strings.TrimSpace(title)) + "</summary>" + renderRichBlocksHTML(body) + "</details>"
 }
 
 // renderRichBlocksHTML renders markdown text as a sequence of rich-message
