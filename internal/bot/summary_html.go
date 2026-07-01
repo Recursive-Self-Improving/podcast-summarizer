@@ -183,7 +183,7 @@ func summaryHeadingTitle(line string) (string, bool) {
 		return "直觀地可以 bullish / bearish on 什麼", true
 	case containsAny(candidate, "直观地可以 bullish / bearish on 什么", "直观"):
 		return "直观地可以 bullish / bearish on 什么", true
-	case containsAny(candidate, "可能利好/利空的股票", "利好/利空", "利好利空"):
+	case containsAny(candidate, "可能利好/利空的股票", "利好/利空", "利好利空") || containsAll(candidate, "利好", "利空"):
 		return "可能利好/利空的股票", true
 	default:
 		return "", false
@@ -249,6 +249,15 @@ func containsAny(text string, needles ...string) bool {
 		}
 	}
 	return false
+}
+
+func containsAll(text string, needles ...string) bool {
+	for _, needle := range needles {
+		if !strings.Contains(text, needle) {
+			return false
+		}
+	}
+	return true
 }
 
 func renderSummaryMetadataHeaderHTML(metadata display.SummaryMetadata) string {

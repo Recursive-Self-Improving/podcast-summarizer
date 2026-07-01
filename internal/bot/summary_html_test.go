@@ -213,10 +213,12 @@ func TestRenderFinalSummaryHTMLMessagesFallsBackToWholeSummary(t *testing.T) {
 func TestSummaryHeadingTitleAcceptsNumberedInvestmentHeadings(t *testing.T) {
 	tests := map[string]string{
 		"1. 核心摘要": "核心摘要",
-		"二、容易被忽略但有價值的資訊":                    "容易被忽略但有價值的資訊",
-		"**直观地可以 bullish / bearish on 什么**": "直观地可以 bullish / bearish on 什么",
-		"隱含地可以 bullish / bearish on 什麼：":    "隱含地可以 bullish / bearish on 什麼",
-		"5）可能利好/利空的股票":                      "可能利好/利空的股票",
+		"二、容易被忽略但有價值的資訊":                  "容易被忽略但有價值的資訊",
+		"**直观地可以 bullish/bearish on 什么**": "直观地可以 bullish / bearish on 什么",
+		"隱含地可以 bullish/bearish on 什麼：":    "隱含地可以 bullish / bearish on 什麼",
+		"5）可能利好/利空的股票":                    "可能利好/利空的股票",
+		"## 可能利好、利空的股票":                   "可能利好/利空的股票",
+		"可能利好，利空的股票：":                     "可能利好/利空的股票",
 	}
 	for heading, want := range tests {
 		t.Run(heading, func(t *testing.T) {
