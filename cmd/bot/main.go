@@ -104,11 +104,13 @@ func run(logger *slog.Logger) error {
 			TempRoot:  cfg.TempRoot,
 			Logger:    logger.With("component", "subtitle_downloader"),
 		},
-		Summarizer: summarize.Service{Summarizer: llm},
-		Sender:     sender,
-		Progress:   progressNotifier,
-		Model:      cfg.OpenAIModel,
-		Logger:     logger.With("component", "summary_service"),
+		Summarizer:                summarize.Service{Summarizer: llm},
+		Sender:                    sender,
+		Progress:                  progressNotifier,
+		SummaryBroadcastChannelID: cfg.SummaryBroadcastChannelID,
+		SummaryBroadcaster:        sender,
+		Model:                     cfg.OpenAIModel,
+		Logger:                    logger.With("component", "summary_service"),
 	}
 	requeuedRequests, err := summaryService.RequeueInterruptedSummaryRequests(ctx)
 	if err != nil {

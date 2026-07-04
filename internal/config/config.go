@@ -24,22 +24,23 @@ const (
 )
 
 type Config struct {
-	TelegramBotToken   string
-	TelegramSkipOld    bool
-	BotOwnerID         int64
-	OpenAIBaseURL      string
-	OpenAIAPIKey       string
-	OpenAIModel        string
-	SQLitePath         string
-	TempRoot           string
-	YTDLPPath          string
-	YTDLPArgs          []string
-	FFmpegPath         string
-	PythonPath         string
-	WhisperModel       string
-	WhisperDevice      string
-	WhisperCompute     string
-	WhisperSegmentSecs int
+	TelegramBotToken          string
+	TelegramSkipOld           bool
+	SummaryBroadcastChannelID int64
+	BotOwnerID                int64
+	OpenAIBaseURL             string
+	OpenAIAPIKey              string
+	OpenAIModel               string
+	SQLitePath                string
+	TempRoot                  string
+	YTDLPPath                 string
+	YTDLPArgs                 []string
+	FFmpegPath                string
+	PythonPath                string
+	WhisperModel              string
+	WhisperDevice             string
+	WhisperCompute            string
+	WhisperSegmentSecs        int
 }
 
 type LookupFunc func(string) (string, bool)
@@ -95,6 +96,14 @@ func LoadWithLookup(lookup LookupFunc) (Config, error) {
 		return Config{}, err
 	}
 	cfg.TelegramSkipOld = telegramSkipOld
+
+	if raw, ok := lookup("SUMMARY_BROADCAST_CHANNEL_ID"); ok && strings.TrimSpace(raw) != "" {
+		channelID, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+		if err != nil {
+			return Config{}, fmt.Errorf("SUMMARY_BROADCAST_CHANNEL_ID must be an int64: %w", err)
+		}
+		cfg.SummaryBroadcastChannelID = channelID
+	}
 
 	cfg.YTDLPArgs, err = getArgList(lookup, "YT_DLP_ARGS")
 	if err != nil {

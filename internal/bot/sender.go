@@ -95,15 +95,24 @@ func (s Sender) SendFinalSummaryParts(ctx context.Context, chatID, replyToMessag
 	return s.SendFinalSummaryPartsWithMetadata(ctx, chatID, replyToMessageID, text, requestID, display.SummaryMetadata{}, attrs...)
 }
 func (s Sender) SendFinalSummaryPartsWithMetadata(ctx context.Context, chatID, replyToMessageID int64, text string, requestID int64, metadata display.SummaryMetadata, attrs ...any) ([]int64, error) {
+	return s.sendFinalSummaryPartsWithMetadata(ctx, chatID, replyToMessageID, text, metadata, summaryVariantKeyboard(requestID), attrs...)
+}
+
+func (s Sender) BroadcastFinalSummary(ctx context.Context, chatID int64, text string, metadata display.SummaryMetadata, attrs ...any) error {
+	_, err := s.sendFinalSummaryPartsWithMetadata(ctx, chatID, 0, text, metadata, nil, attrs...)
+	return err
+}
+
+func (s Sender) sendFinalSummaryPartsWithMetadata(ctx context.Context, chatID, replyToMessageID int64, text string, metadata display.SummaryMetadata, markup any, attrs ...any) ([]int64, error) {
 	plainFallback := summaryTextWithMetadata(text, metadata)
 	if s.RichSender != nil {
 		htmlText := renderSummaryRichHTML(text, metadata)
 		if runeLen(htmlText) > 0 && runeLen(htmlText) <= maxRichMessageChars {
-			messageID, err := s.RichSender.SendRichMessage(ctx, chatID, replyToMessageID, htmlText, summaryVariantKeyboard(requestID))
+			messageID, err := s.RichSender.SendRichMessage(ctx, chatID, replyToMessageID, htmlText, markup)
 			if err != nil {
 				s.logger().Warn("telegram rich message send failed", append([]any{"chat_id", chatID, "error", err}, attrs...)...)
 				if replyToMessageID != 0 && isMissingReplyTargetError(err) {
-					return s.SendFinalSummaryPartsWithMetadata(ctx, chatID, 0, text, requestID, metadata, attrs...)
+					return s.sendFinalSummaryPartsWithMetadata(ctx, chatID, 0, text, metadata, markup, attrs...)
 				}
 				if isMessageTooLongError(err) {
 					messageID, fallbackErr := s.sendDocumentFallback(ctx, chatID, replyToMessageID, plainFallback, attrs)
@@ -137,7 +146,7 @@ func (s Sender) SendFinalSummaryPartsWithMetadata(ctx context.Context, chatID, r
 		}
 		return []int64{messageID}, nil
 	}
-	return s.sendHTMLMessages(ctx, client, chatID, replyToMessageID, plainFallback, messages, summaryVariantKeyboard(requestID), attrs)
+	return s.sendHTMLMessages(ctx, client, chatID, replyToMessageID, plainFallback, messages, markup, attrs)
 }
 
 func (s Sender) EditFinalSummaryParts(ctx context.Context, chatID int64, messageIDs []int64, text string, requestID int64, attrs ...any) error {

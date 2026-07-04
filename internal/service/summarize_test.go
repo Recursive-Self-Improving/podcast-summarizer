@@ -199,6 +199,109 @@ func TestSummaryServiceManualSummaryStillReplies(t *testing.T) {
 	}
 }
 
+func TestSummaryServiceBroadcastsGeneratedSummaryAfterSuccessfulDelivery(t *testing.T) {
+	ctx := context.Background()
+	repo := newSummaryRepo()
+	media := db.MediaItem{ID: 1, TranscriptText: "transcript"}
+	prompt := summarize.ResolvePrompt("")
+	promptHash := summarize.PromptHash(prompt)
+	request1 := repo.addRequest(db.SummaryRequest{MediaItemID: media.ID, ChatID: 10, PromptHash: promptHash, PromptText: prompt, Status: "pending_summary"})
+	request2 := repo.addRequest(db.SummaryRequest{MediaItemID: media.ID, ChatID: 11, PromptHash: promptHash, PromptText: prompt, Status: "pending_summary"})
+	sender := &fakeFinalSummarySender{}
+	broadcaster := &fakeSummaryBroadcaster{}
+
+	err := SummaryService{Repo: repo, Summarizer: &fakeSummaryLLM{responses: []string{"generated summary"}}, Sender: sender, SummaryBroadcastChannelID: -1001234567890, SummaryBroadcaster: broadcaster, Model: "model"}.ProcessRequests(ctx, media, []db.SummaryRequest{request1, request2})
+	if err != nil {
+		t.Fatalf("ProcessRequests returned error: %v", err)
+	}
+	if !slices.Equal(sender.finalSummaries, []string{"generated summary", "generated summary"}) {
+		t.Fatalf("final summaries = %#v", sender.finalSummaries)
+	}
+	if len(broadcaster.calls) != 1 {
+		t.Fatalf("broadcast calls = %#v", broadcaster.calls)
+	}
+	if broadcaster.calls[0].chatID != -1001234567890 || broadcaster.calls[0].text != "generated summary" {
+		t.Fatalf("broadcast call = %#v", broadcaster.calls[0])
+	}
+}
+
+func TestSummaryServiceDoesNotBroadcastCachedSummary(t *testing.T) {
+	ctx := context.Background()
+	repo := newSummaryRepo()
+	media := db.MediaItem{ID: 1, TranscriptText: "transcript"}
+	prompt := summarize.ResolvePrompt("")
+	promptHash := summarize.PromptHash(prompt)
+	repo.addCache(db.SummaryCache{MediaItemID: media.ID, PromptHash: promptHash, PromptText: prompt, SummaryText: "cached summary", Model: "model"})
+	request := repo.addRequest(db.SummaryRequest{MediaItemID: media.ID, ChatID: 10, PromptHash: promptHash, PromptText: prompt, Status: "pending_summary"})
+	broadcaster := &fakeSummaryBroadcaster{}
+
+	err := SummaryService{Repo: repo, Summarizer: &fakeSummaryLLM{}, Sender: &fakeFinalSummarySender{}, SummaryBroadcastChannelID: -1001234567890, SummaryBroadcaster: broadcaster, Model: "model"}.ProcessRequests(ctx, media, []db.SummaryRequest{request})
+	if err != nil {
+		t.Fatalf("ProcessRequests returned error: %v", err)
+	}
+	if len(broadcaster.calls) != 0 {
+		t.Fatalf("broadcast calls = %#v", broadcaster.calls)
+	}
+}
+
+func TestSummaryServiceDoesNotBroadcastWhenFinalSendFails(t *testing.T) {
+	ctx := context.Background()
+	repo := newSummaryRepo()
+	media := db.MediaItem{ID: 1, TranscriptText: "transcript"}
+	prompt := summarize.ResolvePrompt("")
+	request := repo.addRequest(db.SummaryRequest{MediaItemID: media.ID, ChatID: 10, PromptHash: summarize.PromptHash(prompt), PromptText: prompt, Status: "pending_summary"})
+	broadcaster := &fakeSummaryBroadcaster{}
+	sender := &fakeFinalSummarySender{finalErrors: map[int64]error{10: errors.New("send failed")}}
+
+	err := SummaryService{Repo: repo, Summarizer: &fakeSummaryLLM{responses: []string{"generated summary"}}, Sender: sender, SummaryBroadcastChannelID: -1001234567890, SummaryBroadcaster: broadcaster, Model: "model"}.ProcessRequests(ctx, media, []db.SummaryRequest{request})
+	if !IsDurableSummaryDeliveryError(err) {
+		t.Fatalf("expected durable delivery error, got %v", err)
+	}
+	if len(broadcaster.calls) != 0 {
+		t.Fatalf("broadcast calls = %#v", broadcaster.calls)
+	}
+}
+
+func TestSummaryServiceBroadcastFailureIsNonFatal(t *testing.T) {
+	ctx := context.Background()
+	repo := newSummaryRepo()
+	media := db.MediaItem{ID: 1, TranscriptText: "transcript"}
+	prompt := summarize.ResolvePrompt("")
+	request := repo.addRequest(db.SummaryRequest{MediaItemID: media.ID, ChatID: 10, PromptHash: summarize.PromptHash(prompt), PromptText: prompt, Status: "pending_summary"})
+	broadcaster := &fakeSummaryBroadcaster{err: errors.New("channel send failed")}
+
+	err := SummaryService{Repo: repo, Summarizer: &fakeSummaryLLM{responses: []string{"generated summary"}}, Sender: &fakeFinalSummarySender{}, SummaryBroadcastChannelID: -1001234567890, SummaryBroadcaster: broadcaster, Model: "model"}.ProcessRequests(ctx, media, []db.SummaryRequest{request})
+	if err != nil {
+		t.Fatalf("ProcessRequests returned error: %v", err)
+	}
+	if repo.requests[request.ID].Status != "sent" {
+		t.Fatalf("request = %#v", repo.requests[request.ID])
+	}
+	if len(broadcaster.calls) != 1 {
+		t.Fatalf("broadcast calls = %#v", broadcaster.calls)
+	}
+}
+
+func TestSummaryServiceBroadcastsWatchGeneratedSummaryOnce(t *testing.T) {
+	ctx := context.Background()
+	repo := newSummaryRepo()
+	repo.addMedia(db.MediaItem{Provider: "xiaoyuzhou", ProviderMediaID: "episode", CanonicalURL: "https://www.xiaoyuzhoufm.com/episode/episode", Status: mediaStatusTranscriptReady, TranscriptText: "transcript"})
+	sender := &fakeFinalSummarySender{}
+	broadcaster := &fakeSummaryBroadcaster{}
+	service := SummaryService{Repo: repo, Summarizer: &fakeSummaryLLM{responses: []string{"watch summary"}}, Sender: sender, SummaryBroadcastChannelID: -1001234567890, SummaryBroadcaster: broadcaster, Model: "model"}
+
+	result, err := service.RequestWatchSummary(ctx, WatchSummaryCommand{Provider: "xiaoyuzhou", ProviderMediaID: "episode", CanonicalURL: "https://www.xiaoyuzhoufm.com/episode/episode", Subscribers: []WatchSummarySubscriber{{ChatID: 10, UserID: 100}, {ChatID: 11, UserID: 101}}})
+	if err != nil {
+		t.Fatalf("RequestWatchSummary returned error: %v", err)
+	}
+	if !result.Summarized || !slices.Equal(sender.finalSummaries, []string{"watch summary", "watch summary"}) {
+		t.Fatalf("result=%#v final summaries=%#v", result, sender.finalSummaries)
+	}
+	if len(broadcaster.calls) != 1 || broadcaster.calls[0].text != "watch summary" {
+		t.Fatalf("broadcast calls = %#v", broadcaster.calls)
+	}
+}
+
 func TestSummaryServiceSwitchSummaryVariantReusesCacheAndEditsStoredMessages(t *testing.T) {
 	ctx := context.Background()
 	repo := newSummaryRepo()
@@ -1195,22 +1298,48 @@ func (f *fakeSummarySender) SendText(_ context.Context, chatID int64, text strin
 
 type fakeFinalSummarySender struct {
 	fakeSummarySender
+	finalErrors       map[int64]error
+	finalChatIDs      []int64
 	finalSummaries    []string
 	finalReplyTargets []int64
 	metadata          []display.SummaryMetadata
 }
 
-func (f *fakeFinalSummarySender) SendFinalSummary(_ context.Context, _ int64, replyToMessageID int64, text string, _ ...any) (int64, error) {
+func (f *fakeFinalSummarySender) SendFinalSummary(_ context.Context, chatID int64, replyToMessageID int64, text string, _ ...any) (int64, error) {
+	if err := f.finalErrors[chatID]; err != nil {
+		return 0, err
+	}
+	f.finalChatIDs = append(f.finalChatIDs, chatID)
 	f.finalSummaries = append(f.finalSummaries, text)
 	f.finalReplyTargets = append(f.finalReplyTargets, replyToMessageID)
 	return int64(len(f.finalSummaries)), nil
 }
 
-func (f *fakeFinalSummarySender) SendFinalSummaryPartsWithMetadata(_ context.Context, _ int64, replyToMessageID int64, text string, _ int64, metadata display.SummaryMetadata, _ ...any) ([]int64, error) {
+func (f *fakeFinalSummarySender) SendFinalSummaryPartsWithMetadata(_ context.Context, chatID int64, replyToMessageID int64, text string, _ int64, metadata display.SummaryMetadata, _ ...any) ([]int64, error) {
+	if err := f.finalErrors[chatID]; err != nil {
+		return nil, err
+	}
+	f.finalChatIDs = append(f.finalChatIDs, chatID)
 	f.finalSummaries = append(f.finalSummaries, text)
 	f.finalReplyTargets = append(f.finalReplyTargets, replyToMessageID)
 	f.metadata = append(f.metadata, metadata)
 	return []int64{int64(len(f.finalSummaries)), int64(len(f.finalSummaries) + 100)}, nil
+}
+
+type broadcastCall struct {
+	chatID   int64
+	text     string
+	metadata display.SummaryMetadata
+}
+
+type fakeSummaryBroadcaster struct {
+	calls []broadcastCall
+	err   error
+}
+
+func (f *fakeSummaryBroadcaster) BroadcastFinalSummary(_ context.Context, chatID int64, text string, metadata display.SummaryMetadata, _ ...any) error {
+	f.calls = append(f.calls, broadcastCall{chatID: chatID, text: text, metadata: metadata})
+	return f.err
 }
 
 type fakeSummaryEditor struct {

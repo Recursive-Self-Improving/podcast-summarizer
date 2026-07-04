@@ -80,6 +80,10 @@ type FinalSummaryPartsWithMetadataSender interface {
 	SendFinalSummaryPartsWithMetadata(ctx context.Context, chatID, replyToMessageID int64, text string, requestID int64, metadata display.SummaryMetadata, attrs ...any) ([]int64, error)
 }
 
+type SummaryBroadcaster interface {
+	BroadcastFinalSummary(ctx context.Context, chatID int64, text string, metadata display.SummaryMetadata, attrs ...any) error
+}
+
 type FinalSummaryEditor interface {
 	EditFinalSummaryParts(ctx context.Context, chatID int64, messageIDs []int64, text string, requestID int64, attrs ...any) error
 }
@@ -98,14 +102,16 @@ type SummaryProgressMetadataNotifier interface {
 }
 
 type SummaryService struct {
-	Repo               SummaryRepository
-	Registry           SummaryProviderRegistry
-	SubtitleDownloader SubtitleDownloader
-	Summarizer         summarize.Summarizer
-	Sender             SummarySender
-	Progress           SummaryProgressNotifier
-	Model              string
-	Logger             *slog.Logger
+	Repo                      SummaryRepository
+	Registry                  SummaryProviderRegistry
+	SubtitleDownloader        SubtitleDownloader
+	Summarizer                summarize.Summarizer
+	Sender                    SummarySender
+	Progress                  SummaryProgressNotifier
+	SummaryBroadcastChannelID int64
+	SummaryBroadcaster        SummaryBroadcaster
+	Model                     string
+	Logger                    *slog.Logger
 }
 
 type SummaryCommand struct {
@@ -160,6 +166,11 @@ type SwitchSummaryVariantCommand struct {
 type summaryRequestGroup struct {
 	promptHash string
 	promptText string
+}
+
+type summaryCacheResult struct {
+	cache     db.SummaryCache
+	generated bool
 }
 
 type durableSummaryDeliveryError struct {
@@ -461,12 +472,12 @@ func (s SummaryService) processRequestsWithMetadata(ctx context.Context, media d
 
 	var processErr error
 	for group, groupedRequests := range groups {
-		cache, err := s.summaryCache(ctx, media, group, groupedRequests)
+		cacheResult, err := s.summaryCache(ctx, media, group, groupedRequests)
 		if err != nil {
 			processErr = errors.Join(processErr, err, s.markRequestsRetryPending(ctx, groupedRequests, err))
 			continue
 		}
-		processErr = errors.Join(processErr, s.sendSummary(ctx, media, groupedRequests, cache, metadata))
+		processErr = errors.Join(processErr, s.sendSummary(ctx, media, groupedRequests, cacheResult, metadata))
 	}
 	return processErr
 }
@@ -519,48 +530,50 @@ func (s SummaryService) claimSummaryRequest(ctx context.Context, request db.Summ
 	return true, nil
 }
 
-func (s SummaryService) summaryCache(ctx context.Context, media db.MediaItem, group summaryRequestGroup, requests []db.SummaryRequest) (db.SummaryCache, error) {
+func (s SummaryService) summaryCache(ctx context.Context, media db.MediaItem, group summaryRequestGroup, requests []db.SummaryRequest) (summaryCacheResult, error) {
 	cache, found, err := s.Repo.FindSummaryCache(ctx, media.ID, group.promptHash, s.Model)
 	if err != nil {
-		return db.SummaryCache{}, err
+		return summaryCacheResult{}, err
 	}
 	if found {
 		s.logger().Info("summary cache hit", "media_id", media.ID, "summary_cache_id", cache.ID, "model", s.Model, "request_ids", requestIDs(requests))
-		return cache, nil
+		return summaryCacheResult{cache: cache}, nil
 	}
 	s.logger().Info("summary cache miss", "media_id", media.ID, "model", s.Model, "request_ids", requestIDs(requests))
 	return s.createSummaryCache(ctx, media, group, requests)
 }
 
-func (s SummaryService) createSummaryCache(ctx context.Context, media db.MediaItem, group summaryRequestGroup, requests []db.SummaryRequest) (db.SummaryCache, error) {
+func (s SummaryService) createSummaryCache(ctx context.Context, media db.MediaItem, group summaryRequestGroup, requests []db.SummaryRequest) (summaryCacheResult, error) {
 	summaryText, err := s.Summarizer.Summarize(ctx, group.promptText, media.TranscriptText)
 	if err != nil {
 		s.logger().Error("summarization failed", "media_id", media.ID, "request_ids", requestIDs(requests), "model", s.Model, "error", err)
-		return db.SummaryCache{}, fmt.Errorf("summarize media %d: %w", media.ID, err)
+		return summaryCacheResult{}, fmt.Errorf("summarize media %d: %w", media.ID, err)
 	}
 
 	cache := db.SummaryCache{MediaItemID: media.ID, PromptHash: group.promptHash, PromptText: group.promptText, SummaryText: summaryText, Model: s.Model}
 	insertedCache, err := s.Repo.InsertSummaryCache(ctx, cache)
 	if err == nil {
-		return insertedCache, nil
+		return summaryCacheResult{cache: insertedCache, generated: true}, nil
 	}
 
 	cachedSummary, found, retryErr := s.Repo.FindSummaryCache(ctx, media.ID, group.promptHash, s.Model)
 	if retryErr != nil {
-		return db.SummaryCache{}, errors.Join(err, retryErr)
+		return summaryCacheResult{}, errors.Join(err, retryErr)
 	}
 	if !found {
-		return db.SummaryCache{}, err
+		return summaryCacheResult{}, err
 	}
-	return cachedSummary, nil
+	return summaryCacheResult{cache: cachedSummary}, nil
 }
 
-func (s SummaryService) sendSummary(ctx context.Context, media db.MediaItem, requests []db.SummaryRequest, cache db.SummaryCache, metadata display.SummaryMetadata) error {
+func (s SummaryService) sendSummary(ctx context.Context, media db.MediaItem, requests []db.SummaryRequest, cacheResult summaryCacheResult, metadata display.SummaryMetadata) error {
 	if s.Progress != nil && hasReplyRequests(requests) {
 		if err := s.Progress.MediaProgress(ctx, media.ID, SummarySendingNotification().Text); err != nil {
 			s.logger().Warn("summary sending progress failed", "media_id", media.ID, "error", err)
 		}
 	}
+	cache := cacheResult.cache
+	sent := false
 	var sendErr error
 	for _, request := range requests {
 		attrs := []any{"request_id", request.ID, "media_id", request.MediaItemID, "summary_cache_id", cache.ID}
@@ -577,9 +590,23 @@ func (s SummaryService) sendSummary(ctx context.Context, media db.MediaItem, req
 		}
 		if err := s.markSummarySent(ctx, request.ID, cache.ID); err != nil {
 			sendErr = errors.Join(sendErr, err)
+			continue
 		}
+		sent = true
+	}
+	if cacheResult.generated && sent {
+		s.broadcastGeneratedSummary(ctx, cache, metadata)
 	}
 	return sendErr
+}
+
+func (s SummaryService) broadcastGeneratedSummary(ctx context.Context, cache db.SummaryCache, metadata display.SummaryMetadata) {
+	if s.SummaryBroadcastChannelID == 0 || s.SummaryBroadcaster == nil {
+		return
+	}
+	if err := s.SummaryBroadcaster.BroadcastFinalSummary(context.WithoutCancel(ctx), s.SummaryBroadcastChannelID, cache.SummaryText, metadata, "summary_cache_id", cache.ID); err != nil {
+		s.logger().Warn("summary channel broadcast failed", "channel_id", s.SummaryBroadcastChannelID, "summary_cache_id", cache.ID, "error", err)
+	}
 }
 
 func (s SummaryService) sendFinalSummary(ctx context.Context, request db.SummaryRequest, text string, metadata display.SummaryMetadata, attrs ...any) error {
@@ -669,7 +696,8 @@ func (s SummaryService) SwitchSummaryVariant(ctx context.Context, command Switch
 		return err
 	}
 	if !found {
-		cache, err = s.createSummaryCache(ctx, media, summaryRequestGroup{promptHash: promptHash, promptText: prompt}, []db.SummaryRequest{request})
+		cacheResult, err := s.createSummaryCache(ctx, media, summaryRequestGroup{promptHash: promptHash, promptText: prompt}, []db.SummaryRequest{request})
+		cache = cacheResult.cache
 		if err != nil {
 			return err
 		}

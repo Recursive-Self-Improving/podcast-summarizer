@@ -107,26 +107,30 @@ func TestLoadWithLookupAppliesDefaults(t *testing.T) {
 	if !cfg.TelegramSkipOld {
 		t.Fatal("TelegramSkipOld should default to true")
 	}
+	if cfg.SummaryBroadcastChannelID != 0 {
+		t.Fatalf("SummaryBroadcastChannelID = %d", cfg.SummaryBroadcastChannelID)
+	}
 }
 
 func TestLoadWithLookupReadsOverrides(t *testing.T) {
 	env := map[string]string{
-		"TELEGRAM_BOT_TOKEN":        "telegram-token",
-		"BOT_OWNER_ID":              "12345",
-		"OPENAI_BASE_URL":           "https://llm.example/v1",
-		"OPENAI_API_KEY":            "openai-key",
-		"OPENAI_MODEL":              "custom-model",
-		"SQLITE_PATH":               "/tmp/bot.db",
-		"TEMP_ROOT":                 "/var/lib/bot/tmp",
-		"YT_DLP_PATH":               "/usr/local/bin/yt-dlp",
-		"YT_DLP_ARGS":               "--extractor-args \"youtube:player_client=mweb\" --cookies /var/lib/bot/cookies.txt",
-		"FFMPEG_PATH":               "/usr/local/bin/ffmpeg",
-		"PYTHON_PATH":               "/usr/local/bin/python3",
-		"WHISPER_MODEL":             "medium",
-		"WHISPER_DEVICE":            "cuda",
-		"WHISPER_COMPUTE":           "float16",
-		"WHISPER_SEGMENT_SECONDS":   "600",
-		"TELEGRAM_SKIP_OLD_UPDATES": "false",
+		"TELEGRAM_BOT_TOKEN":           "telegram-token",
+		"BOT_OWNER_ID":                 "12345",
+		"OPENAI_BASE_URL":              "https://llm.example/v1",
+		"OPENAI_API_KEY":               "openai-key",
+		"OPENAI_MODEL":                 "custom-model",
+		"SQLITE_PATH":                  "/tmp/bot.db",
+		"TEMP_ROOT":                    "/var/lib/bot/tmp",
+		"YT_DLP_PATH":                  "/usr/local/bin/yt-dlp",
+		"YT_DLP_ARGS":                  "--extractor-args \"youtube:player_client=mweb\" --cookies /var/lib/bot/cookies.txt",
+		"FFMPEG_PATH":                  "/usr/local/bin/ffmpeg",
+		"PYTHON_PATH":                  "/usr/local/bin/python3",
+		"WHISPER_MODEL":                "medium",
+		"WHISPER_DEVICE":               "cuda",
+		"WHISPER_COMPUTE":              "float16",
+		"WHISPER_SEGMENT_SECONDS":      "600",
+		"TELEGRAM_SKIP_OLD_UPDATES":    "false",
+		"SUMMARY_BROADCAST_CHANNEL_ID": "-1001234567890",
 	}
 
 	cfg, err := LoadWithLookup(mapLookup(env))
@@ -173,6 +177,9 @@ func TestLoadWithLookupReadsOverrides(t *testing.T) {
 	}
 	if cfg.TelegramSkipOld {
 		t.Fatal("TelegramSkipOld should parse false")
+	}
+	if cfg.SummaryBroadcastChannelID != -1001234567890 {
+		t.Fatalf("SummaryBroadcastChannelID = %d", cfg.SummaryBroadcastChannelID)
 	}
 }
 
@@ -221,6 +228,16 @@ func TestLoadWithLookupRejectsInvalidTelegramSkipOldUpdates(t *testing.T) {
 	_, err := LoadWithLookup(mapLookup(env))
 	if err == nil || !strings.Contains(err.Error(), "TELEGRAM_SKIP_OLD_UPDATES") {
 		t.Fatalf("expected TELEGRAM_SKIP_OLD_UPDATES error, got %v", err)
+	}
+}
+
+func TestLoadWithLookupRejectsInvalidSummaryBroadcastChannelID(t *testing.T) {
+	env := requiredEnv()
+	env["SUMMARY_BROADCAST_CHANNEL_ID"] = "@channel"
+
+	_, err := LoadWithLookup(mapLookup(env))
+	if err == nil || !strings.Contains(err.Error(), "SUMMARY_BROADCAST_CHANNEL_ID") {
+		t.Fatalf("expected SUMMARY_BROADCAST_CHANNEL_ID error, got %v", err)
 	}
 }
 

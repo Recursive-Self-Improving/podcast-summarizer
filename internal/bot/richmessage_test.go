@@ -281,6 +281,32 @@ func TestSenderSendFinalSummaryUsesRichMessageWhenAvailable(t *testing.T) {
 	}
 }
 
+func TestSenderBroadcastFinalSummaryUsesRichMessageWithoutReplyOrMarkup(t *testing.T) {
+	client := &fakeSenderClient{}
+	rich := &stubRichSender{}
+	sender := Sender{Client: client, RichSender: rich, TempDir: t.TempDir()}
+	summary := simplifiedInvestmentSummary("core", "missed", "explicit", "implicit", "stocks")
+
+	if err := sender.BroadcastFinalSummary(context.Background(), -1001234567890, summary, display.SummaryMetadata{EpisodeTitle: "Episode"}); err != nil {
+		t.Fatalf("BroadcastFinalSummary: %v", err)
+	}
+	if !rich.sendCalled {
+		t.Fatal("rich sender was not used")
+	}
+	if rich.sentReply != 0 {
+		t.Fatalf("reply target = %d", rich.sentReply)
+	}
+	if rich.sentMarkup != nil {
+		t.Fatalf("markup = %#v", rich.sentMarkup)
+	}
+	if !strings.Contains(rich.sentHTML, "Episode") || !strings.Contains(rich.sentHTML, "<details>") {
+		t.Fatalf("sent HTML missing metadata/details: %s", rich.sentHTML)
+	}
+	if len(client.htmlMessages) != 0 {
+		t.Fatalf("legacy HTML path used: %#v", client.htmlMessages)
+	}
+}
+
 func TestSenderSendFinalSummaryFallsBackToHTMLWhenRichTooLong(t *testing.T) {
 	client := &fakeSenderClient{}
 	rich := &stubRichSender{}
