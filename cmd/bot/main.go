@@ -110,6 +110,7 @@ func run(logger *slog.Logger) error {
 		SummaryBroadcastChannelID: cfg.SummaryBroadcastChannelID,
 		SummaryBroadcaster:        sender,
 		Model:                     cfg.OpenAIModel,
+		DefaultSummaryVariant:     cfg.DefaultSummaryVariant,
 		Logger:                    logger.With("component", "summary_service"),
 	}
 	requeuedRequests, err := summaryService.RequeueInterruptedSummaryRequests(ctx)
@@ -120,11 +121,12 @@ func run(logger *slog.Logger) error {
 		logger.Warn("requeued interrupted summary requests", "count", requeuedRequests)
 	}
 	statusService := service.StatusService{
-		Auth:     authorizer,
-		Registry: registry,
-		Repo:     repo,
-		Model:    cfg.OpenAIModel,
-		Logger:   logger.With("component", "status_service"),
+		Auth:                  authorizer,
+		Registry:              registry,
+		Repo:                  repo,
+		Model:                 cfg.OpenAIModel,
+		DefaultSummaryVariant: cfg.DefaultSummaryVariant,
+		Logger:                logger.With("component", "status_service"),
 	}
 	watchService := service.WatchService{
 		Repo:     repo,

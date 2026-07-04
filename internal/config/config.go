@@ -9,6 +9,8 @@ import (
 	"unicode"
 
 	"github.com/joho/godotenv"
+
+	"github.com/Recursive-Self-Improving/podcast-summarizer/internal/summarize"
 )
 
 const (
@@ -27,6 +29,7 @@ type Config struct {
 	TelegramBotToken          string
 	TelegramSkipOld           bool
 	SummaryBroadcastChannelID int64
+	DefaultSummaryVariant     summarize.SummaryVariant
 	BotOwnerID                int64
 	OpenAIBaseURL             string
 	OpenAIAPIKey              string
@@ -64,16 +67,17 @@ func loadDotenv(path string) error {
 
 func LoadWithLookup(lookup LookupFunc) (Config, error) {
 	cfg := Config{
-		OpenAIBaseURL:      getOrDefault(lookup, "OPENAI_BASE_URL", defaultOpenAIBaseURL),
-		SQLitePath:         getOrDefault(lookup, "SQLITE_PATH", defaultSQLitePath),
-		TempRoot:           getOrDefault(lookup, "TEMP_ROOT", ""),
-		YTDLPPath:          getOrDefault(lookup, "YT_DLP_PATH", defaultYTDLPPath),
-		FFmpegPath:         getOrDefault(lookup, "FFMPEG_PATH", defaultFFmpegPath),
-		PythonPath:         getOrDefault(lookup, "PYTHON_PATH", defaultPythonPath),
-		WhisperModel:       getOrDefault(lookup, "WHISPER_MODEL", defaultWhisperModel),
-		WhisperDevice:      getOrDefault(lookup, "WHISPER_DEVICE", defaultWhisperDevice),
-		WhisperCompute:     getOrDefault(lookup, "WHISPER_COMPUTE", defaultWhisperCompute),
-		WhisperSegmentSecs: defaultWhisperSegmentSecond,
+		OpenAIBaseURL:         getOrDefault(lookup, "OPENAI_BASE_URL", defaultOpenAIBaseURL),
+		SQLitePath:            getOrDefault(lookup, "SQLITE_PATH", defaultSQLitePath),
+		TempRoot:              getOrDefault(lookup, "TEMP_ROOT", ""),
+		YTDLPPath:             getOrDefault(lookup, "YT_DLP_PATH", defaultYTDLPPath),
+		FFmpegPath:            getOrDefault(lookup, "FFMPEG_PATH", defaultFFmpegPath),
+		PythonPath:            getOrDefault(lookup, "PYTHON_PATH", defaultPythonPath),
+		WhisperModel:          getOrDefault(lookup, "WHISPER_MODEL", defaultWhisperModel),
+		WhisperDevice:         getOrDefault(lookup, "WHISPER_DEVICE", defaultWhisperDevice),
+		WhisperCompute:        getOrDefault(lookup, "WHISPER_COMPUTE", defaultWhisperCompute),
+		WhisperSegmentSecs:    defaultWhisperSegmentSecond,
+		DefaultSummaryVariant: summarize.DefaultSummaryVariant(),
 	}
 
 	var missing []string
@@ -104,6 +108,13 @@ func LoadWithLookup(lookup LookupFunc) (Config, error) {
 		}
 		cfg.SummaryBroadcastChannelID = channelID
 	}
+	if raw, ok := lookup("DEFAULT_SUMMARY_VARIANT"); ok && strings.TrimSpace(raw) != "" {
+		variant, err := parseDefaultSummaryVariant(raw)
+		if err != nil {
+			return Config{}, err
+		}
+		cfg.DefaultSummaryVariant = variant
+	}
 
 	cfg.YTDLPArgs, err = getArgList(lookup, "YT_DLP_ARGS")
 	if err != nil {
@@ -119,6 +130,17 @@ func LoadWithLookup(lookup LookupFunc) (Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func parseDefaultSummaryVariant(raw string) (summarize.SummaryVariant, error) {
+	switch strings.TrimSpace(raw) {
+	case summarize.VariantSimplified.Code:
+		return summarize.VariantSimplified, nil
+	case summarize.VariantTraditional.Code:
+		return summarize.VariantTraditional, nil
+	default:
+		return summarize.SummaryVariant{}, errors.New("DEFAULT_SUMMARY_VARIANT must be one of zh-hans, zh-hant")
+	}
 }
 
 func getRequired(lookup LookupFunc, name string, missing *[]string) string {

@@ -97,6 +97,29 @@ func TestStatusServiceReportsCompletedSummarizedMedia(t *testing.T) {
 	assertStatusReport(t, report, "summarized", "completed", true, true)
 }
 
+func TestStatusServiceChecksConfiguredDefaultVariantCache(t *testing.T) {
+	repo := newStatusRepo()
+	traditionalPrompt := summarize.VariantTraditional.Prompt()
+	media := repo.addMedia(db.MediaItem{Provider: statusProvider, ProviderMediaID: statusMediaID, CanonicalURL: statusCanonicalURL, Status: "summarized", TranscriptText: "transcript"})
+	repo.addJob(db.TranscriptionJob{MediaItemID: media.ID, Status: "completed"})
+	repo.addCache(db.SummaryCache{MediaItemID: media.ID, PromptHash: summarize.PromptHash(traditionalPrompt), Model: statusModel, SummaryText: "traditional summary"})
+	service := newStatusService(fakeStatusAuth{allowed: true}, fakeStatusRegistry{ref: statusRef()}, repo)
+	service.DefaultSummaryVariant = summarize.VariantTraditional
+
+	report, err := service.Status(context.Background(), StatusQuery{ChatID: 10, UserID: 20, ChatType: auth.ChatTypePrivate, RawURL: statusRawURL})
+	if err != nil {
+		t.Fatalf("Status returned error: %v", err)
+	}
+	assertStatusReport(t, report, "summarized", "completed", true, true)
+
+	service.DefaultSummaryVariant = summarize.VariantSimplified
+	report, err = service.Status(context.Background(), StatusQuery{ChatID: 10, UserID: 20, ChatType: auth.ChatTypePrivate, RawURL: statusRawURL})
+	if err != nil {
+		t.Fatalf("Status returned error: %v", err)
+	}
+	assertStatusReport(t, report, "summarized", "completed", true, false)
+}
+
 func newStatusService(auth StatusAuthorizer, registry StatusProviderRegistry, repo StatusRepository) StatusService {
 	return StatusService{Auth: auth, Registry: registry, Repo: repo, Model: statusModel}
 }

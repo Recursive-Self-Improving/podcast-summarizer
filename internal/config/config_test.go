@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/Recursive-Self-Improving/podcast-summarizer/internal/summarize"
 )
 
 func TestLoadDotenvIgnoresMissingFile(t *testing.T) {
@@ -248,6 +250,56 @@ func TestLoadWithLookupRejectsInvalidYTDLPArgs(t *testing.T) {
 	_, err := LoadWithLookup(mapLookup(env))
 	if err == nil || !strings.Contains(err.Error(), "YT_DLP_ARGS") {
 		t.Fatalf("expected YT_DLP_ARGS error, got %v", err)
+	}
+}
+
+func TestLoadWithLookupDefaultSummaryVariantDefaultsToSimplified(t *testing.T) {
+	cfg, err := LoadWithLookup(mapLookup(requiredEnv()))
+	if err != nil {
+		t.Fatalf("LoadWithLookup returned error: %v", err)
+	}
+	if cfg.DefaultSummaryVariant != summarize.DefaultSummaryVariant() {
+		t.Fatalf("DefaultSummaryVariant = %#v, want %#v", cfg.DefaultSummaryVariant, summarize.DefaultSummaryVariant())
+	}
+}
+
+func TestLoadWithLookupDefaultSummaryVariantAcceptsTraditionalOverride(t *testing.T) {
+	env := requiredEnv()
+	env["DEFAULT_SUMMARY_VARIANT"] = "zh-hant"
+
+	cfg, err := LoadWithLookup(mapLookup(env))
+	if err != nil {
+		t.Fatalf("LoadWithLookup returned error: %v", err)
+	}
+	if cfg.DefaultSummaryVariant != summarize.VariantTraditional {
+		t.Fatalf("DefaultSummaryVariant = %#v, want %#v", cfg.DefaultSummaryVariant, summarize.VariantTraditional)
+	}
+}
+
+func TestLoadWithLookupDefaultSummaryVariantAcceptsSimplifiedOverride(t *testing.T) {
+	env := requiredEnv()
+	env["DEFAULT_SUMMARY_VARIANT"] = "zh-hans"
+
+	cfg, err := LoadWithLookup(mapLookup(env))
+	if err != nil {
+		t.Fatalf("LoadWithLookup returned error: %v", err)
+	}
+	if cfg.DefaultSummaryVariant != summarize.VariantSimplified {
+		t.Fatalf("DefaultSummaryVariant = %#v, want %#v", cfg.DefaultSummaryVariant, summarize.VariantSimplified)
+	}
+}
+
+func TestLoadWithLookupDefaultSummaryVariantRejectsAliasesAndUnknown(t *testing.T) {
+	for _, value := range []string{"js", "fs", "simplified", "traditional", "zh", "zh-CN", "zh-TW", "en", "ZH-HANT", "ZH-HANS"} {
+		t.Run(value, func(t *testing.T) {
+			env := requiredEnv()
+			env["DEFAULT_SUMMARY_VARIANT"] = value
+
+			_, err := LoadWithLookup(mapLookup(env))
+			if err == nil || !strings.Contains(err.Error(), "DEFAULT_SUMMARY_VARIANT") {
+				t.Fatalf("expected DEFAULT_SUMMARY_VARIANT error for %q, got %v", value, err)
+			}
+		})
 	}
 }
 

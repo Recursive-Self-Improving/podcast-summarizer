@@ -6,8 +6,6 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
-
-	"github.com/Recursive-Self-Improving/podcast-summarizer/internal/summarize"
 )
 
 type CommandName string
@@ -84,9 +82,9 @@ func ParseCommand(text string) (Command, error) {
 func parseSummarize(rest string) (Command, error) {
 	url, prompt, ok := splitFirstArg(rest)
 	if !ok {
-		return Command{Name: CommandSummarize, Prompt: summarize.DefaultPrompt}, nil
+		return Command{Name: CommandSummarize}, nil
 	}
-	command := Command{Name: CommandSummarize, URL: url, HasURL: true, Prompt: summarize.DefaultPrompt}
+	command := Command{Name: CommandSummarize, URL: url, HasURL: true}
 	if strings.TrimSpace(prompt) != "" {
 		command.Prompt = strings.TrimSpace(prompt)
 		command.HasPrompt = true

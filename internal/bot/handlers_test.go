@@ -33,7 +33,7 @@ func TestHandlerRoutesSummarize(t *testing.T) {
 		t.Fatalf("commands = %#v", summary.commands)
 	}
 	command := summary.commands[0]
-	if command.RawURL != "https://youtu.be/abc12345678" || command.Prompt != summarize.DefaultPrompt {
+	if command.RawURL != "https://youtu.be/abc12345678" || command.Prompt != "" {
 		t.Fatalf("command = %#v", command)
 	}
 	if len(progress.results) != 1 || !progress.results[0].CreatedTranscriptionJob {
@@ -215,7 +215,7 @@ func TestHandlerRunsPendingSummarizeReply(t *testing.T) {
 		t.Fatalf("commands = %#v", summary.commands)
 	}
 	command := summary.commands[0]
-	if command.RawURL != "https://youtu.be/abc12345678" || command.Prompt != summarize.DefaultPrompt || command.MessageID != 31 {
+	if command.RawURL != "https://youtu.be/abc12345678" || command.Prompt != "" || command.MessageID != 31 {
 		t.Fatalf("command = %#v", command)
 	}
 	if len(progress.results) != 1 {

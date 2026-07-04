@@ -336,7 +336,7 @@ func (h Handler) handlePromptSummarize(ctx context.Context, message Message, raw
 	if err != nil || !allowed {
 		return false, err
 	}
-	return h.requestSummary(ctx, message, rawURL, summarize.DefaultPrompt)
+	return h.requestSummary(ctx, message, rawURL, "")
 }
 
 func (h Handler) ensureCanUse(ctx context.Context, message Message, command CommandName) (bool, error) {

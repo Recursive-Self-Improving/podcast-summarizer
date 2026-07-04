@@ -28,11 +28,12 @@ type StatusRepository interface {
 }
 
 type StatusService struct {
-	Auth     StatusAuthorizer
-	Registry StatusProviderRegistry
-	Repo     StatusRepository
-	Model    string
-	Logger   *slog.Logger
+	Auth                  StatusAuthorizer
+	Registry              StatusProviderRegistry
+	Repo                  StatusRepository
+	Model                 string
+	DefaultSummaryVariant summarize.SummaryVariant
+	Logger                *slog.Logger
 }
 
 type StatusQuery struct {
@@ -93,7 +94,7 @@ func (s StatusService) Status(ctx context.Context, query StatusQuery) (StatusRep
 	if err != nil {
 		return StatusReport{}, err
 	}
-	prompt := summarize.ResolvePrompt(query.Prompt)
+	prompt := s.resolveStatusPrompt(query.Prompt)
 	_, hasSummaryCache, err := s.Repo.FindSummaryCache(ctx, media.ID, summarize.PromptHash(prompt), s.Model)
 	if err != nil {
 		return StatusReport{}, err
@@ -109,6 +110,20 @@ func (s StatusService) Status(ctx context.Context, query StatusQuery) (StatusRep
 	}
 	report.Text = formatStatusReport(report)
 	return report, nil
+}
+
+func (s StatusService) resolveStatusPrompt(prompt string) string {
+	if strings.TrimSpace(prompt) != "" {
+		return summarize.ResolvePrompt(prompt)
+	}
+	return s.defaultSummaryVariant().Prompt()
+}
+
+func (s StatusService) defaultSummaryVariant() summarize.SummaryVariant {
+	if s.DefaultSummaryVariant.Code != "" {
+		return s.DefaultSummaryVariant
+	}
+	return summarize.DefaultSummaryVariant()
 }
 
 func formatStatusReport(report StatusReport) string {

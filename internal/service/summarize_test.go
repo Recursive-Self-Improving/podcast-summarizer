@@ -100,6 +100,31 @@ func TestSummaryServiceWatchSummaryQueuesFanoutWithoutProgress(t *testing.T) {
 	}
 }
 
+func TestSummaryServiceWatchSummaryUsesConfiguredDefaultVariant(t *testing.T) {
+	ctx := context.Background()
+	repo := newSummaryRepo()
+	service := SummaryService{Repo: repo, Summarizer: &fakeSummaryLLM{}, Sender: &fakeSummarySender{}, Model: "model", DefaultSummaryVariant: summarize.VariantTraditional}
+
+	result, err := service.RequestWatchSummary(ctx, WatchSummaryCommand{
+		Provider:        "soundon",
+		ProviderMediaID: "podcast/episode",
+		CanonicalURL:    "https://player.soundon.fm/p/podcast/episodes/episode",
+		Subscribers: []WatchSummarySubscriber{
+			{ChatID: 10, UserID: 100},
+			{ChatID: 11, UserID: 101},
+		},
+	})
+	if err != nil {
+		t.Fatalf("RequestWatchSummary returned error: %v", err)
+	}
+	wantPrompt := summarize.VariantTraditional.Prompt()
+	for _, request := range result.Requests {
+		if request.PromptText != wantPrompt || request.PromptHash != summarize.PromptHash(wantPrompt) {
+			t.Fatalf("request prompt = %#v", request)
+		}
+	}
+}
+
 func TestSummaryServiceWatchSummaryRetryDoesNotDuplicateRequests(t *testing.T) {
 	ctx := context.Background()
 	repo := newSummaryRepo()
@@ -682,6 +707,24 @@ func TestSummaryServiceRequestQueuesTranscriptionJob(t *testing.T) {
 	}
 	if len(summarizer.calls) != 0 || len(sender.messages) != 0 {
 		t.Fatalf("summarizer calls = %#v, messages = %#v", summarizer.calls, sender.messages)
+	}
+}
+
+func TestSummaryServiceRequestUsesConfiguredDefaultVariant(t *testing.T) {
+	repo := newSummaryRepo()
+	summarizer := &fakeSummaryLLM{}
+	sender := &fakeSummarySender{}
+	downloader := &fakeSubtitleDownloader{err: errors.New("no subtitles")}
+	service := newSummaryService(repo, summarizer, sender, downloader)
+	service.DefaultSummaryVariant = summarize.VariantTraditional
+
+	result, err := service.RequestSummary(context.Background(), summaryCommand(""))
+	if err != nil {
+		t.Fatalf("RequestSummary returned error: %v", err)
+	}
+	wantPrompt := summarize.VariantTraditional.Prompt()
+	if result.Request.PromptText != wantPrompt || result.Request.PromptHash != summarize.PromptHash(wantPrompt) {
+		t.Fatalf("request prompt = %#v", result.Request)
 	}
 }
 

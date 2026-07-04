@@ -3,8 +3,6 @@ package bot
 import (
 	"strings"
 	"testing"
-
-	"github.com/Recursive-Self-Improving/podcast-summarizer/internal/summarize"
 )
 
 func TestParseSummarizeDefaultPrompt(t *testing.T) {
@@ -15,7 +13,7 @@ func TestParseSummarizeDefaultPrompt(t *testing.T) {
 	if command.Name != CommandSummarize || command.URL != "https://youtu.be/abcdefghijk" || !command.HasURL {
 		t.Fatalf("command = %#v", command)
 	}
-	if command.Prompt != summarize.DefaultPrompt || command.HasPrompt {
+	if command.Prompt != "" || command.HasPrompt {
 		t.Fatalf("prompt = %q hasPrompt=%v", command.Prompt, command.HasPrompt)
 	}
 }
@@ -61,7 +59,7 @@ func TestParseSummarizeWithoutURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseCommand returned error: %v", err)
 	}
-	if command.Name != CommandSummarize || command.URL != "" || command.HasURL || command.Prompt != summarize.DefaultPrompt || command.HasPrompt {
+	if command.Name != CommandSummarize || command.URL != "" || command.HasURL || command.Prompt != "" || command.HasPrompt {
 		t.Fatalf("command = %#v", command)
 	}
 }
@@ -71,7 +69,7 @@ func TestParseSummarizeWithoutURLWithBotUsername(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseCommand returned error: %v", err)
 	}
-	if command.Name != CommandSummarize || command.URL != "" || command.HasURL || command.Prompt != summarize.DefaultPrompt || command.HasPrompt {
+	if command.Name != CommandSummarize || command.URL != "" || command.HasURL || command.Prompt != "" || command.HasPrompt {
 		t.Fatalf("command = %#v", command)
 	}
 }

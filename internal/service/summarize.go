@@ -111,6 +111,7 @@ type SummaryService struct {
 	SummaryBroadcastChannelID int64
 	SummaryBroadcaster        SummaryBroadcaster
 	Model                     string
+	DefaultSummaryVariant     summarize.SummaryVariant
 	Logger                    *slog.Logger
 }
 
@@ -224,7 +225,7 @@ func (s SummaryService) RequestSummary(ctx context.Context, command SummaryComma
 		return SummaryCommandResult{}, err
 	}
 
-	request := newSummaryRequest(media.ID, command)
+	request := s.newSummaryRequest(media.ID, command)
 	if strings.TrimSpace(media.TranscriptText) != "" {
 		request.Status = summaryRequestPendingSummary
 		request, err = s.Repo.CreateSummaryRequest(ctx, request)
@@ -313,7 +314,7 @@ func (s SummaryService) RequestWatchSummary(ctx context.Context, command WatchSu
 		status = summaryRequestPendingSummary
 	}
 	for _, subscriber := range command.Subscribers {
-		request := newSummaryRequest(media.ID, SummaryCommand{ChatID: subscriber.ChatID, UserID: subscriber.UserID, Prompt: command.Prompt})
+		request := s.newSummaryRequest(media.ID, SummaryCommand{ChatID: subscriber.ChatID, UserID: subscriber.UserID, Prompt: command.Prompt})
 		request.Status = status
 		request, err = s.Repo.CreateSummaryRequest(ctx, request)
 		if err != nil {
@@ -351,8 +352,8 @@ func (s SummaryService) RequestWatchSummary(ctx context.Context, command WatchSu
 	return result, nil
 }
 
-func newSummaryRequest(mediaID int64, command SummaryCommand) db.SummaryRequest {
-	prompt := summarize.DefaultSummaryVariant().Prompt()
+func (s SummaryService) newSummaryRequest(mediaID int64, command SummaryCommand) db.SummaryRequest {
+	prompt := s.defaultSummaryVariant().Prompt()
 	if strings.TrimSpace(command.Prompt) != "" {
 		prompt = summarize.ResolvePrompt(command.Prompt)
 	}
@@ -364,6 +365,13 @@ func newSummaryRequest(mediaID int64, command SummaryCommand) db.SummaryRequest 
 		PromptHash:  summarize.PromptHash(prompt),
 		PromptText:  prompt,
 	}
+}
+
+func (s SummaryService) defaultSummaryVariant() summarize.SummaryVariant {
+	if s.DefaultSummaryVariant.Code != "" {
+		return s.DefaultSummaryVariant
+	}
+	return summarize.DefaultSummaryVariant()
 }
 
 func (s SummaryService) summarizeTranscriptReadyMedia(ctx context.Context, media db.MediaItem, request db.SummaryRequest, createdMedia, usedSubtitle bool) (SummaryCommandResult, error) {
