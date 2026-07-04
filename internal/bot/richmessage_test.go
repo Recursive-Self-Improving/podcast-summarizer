@@ -41,7 +41,7 @@ func TestRenderSummaryRichHTMLMakesEachSectionCollapsible(t *testing.T) {
 func TestRenderSummaryRichHTMLDetectsObservedHeadingVariants(t *testing.T) {
 	summary := strings.Join([]string{
 		"## 核心摘要\ncore",
-		"## 容易被忽略但有价值的信息\nmissed",
+		"## 容易被忽略但有价值的资讯\nmissed",
 		"## 直观地可以 bullish/bearish on 什么\nexplicit",
 		"## 隐含地可以 bullish/bearish on 什么\nimplicit",
 		"## 可能利好、利空的股票\nstocks",

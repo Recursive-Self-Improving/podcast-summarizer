@@ -173,7 +173,7 @@ func summaryHeadingTitle(line string) (string, bool) {
 		return "核心摘要", true
 	case containsAny(candidate, "容易被忽略但有價值的資訊", "有價值的資訊"):
 		return "容易被忽略但有價值的資訊", true
-	case containsAny(candidate, "容易被忽略但有价值的信息", "有价值的信息"):
+	case containsAny(candidate, "容易被忽略但有价值的信息", "有价值的信息", "容易被忽略但有价值的资讯", "有价值的资讯", "有价值资讯"):
 		return "容易被忽略但有价值的信息", true
 	case containsAny(candidate, "隱含地可以 bullish / bearish on 什麼", "隱含"):
 		return "隱含地可以 bullish / bearish on 什麼", true

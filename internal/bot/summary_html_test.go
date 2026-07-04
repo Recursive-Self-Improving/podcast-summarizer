@@ -215,6 +215,7 @@ func TestSummaryHeadingTitleAcceptsNumberedInvestmentHeadings(t *testing.T) {
 		"1. 核心摘要": "核心摘要",
 		"二、容易被忽略但有價值的資訊":                  "容易被忽略但有價值的資訊",
 		"**直观地可以 bullish/bearish on 什么**": "直观地可以 bullish / bearish on 什么",
+		"## 容易被忽略但有价值的资讯":                 "容易被忽略但有价值的信息",
 		"隱含地可以 bullish/bearish on 什麼：":    "隱含地可以 bullish / bearish on 什麼",
 		"5）可能利好/利空的股票":                    "可能利好/利空的股票",
 		"## 可能利好、利空的股票":                   "可能利好/利空的股票",
