@@ -22,36 +22,49 @@ func TestPromptHashDiffers(t *testing.T) {
 	}
 }
 
-func TestDefaultPromptUsesInvestmentSummaryHeadings(t *testing.T) {
-	for _, heading := range []string{
-		"## 核心摘要",
-		"## 容易被忽略但有价值的信息",
-		"## 直观地可以 bullish / bearish on 什么",
-		"## 隐含地可以 bullish / bearish on 什么",
-		"## 可能利好/利空的股票",
-	} {
-		if !strings.Contains(DefaultPrompt, heading) {
-			t.Fatalf("DefaultPrompt missing heading %q", heading)
-		}
+func TestDefaultPromptRequestsStructuredJSONInSimplifiedChinese(t *testing.T) {
+	if !strings.Contains(DefaultPrompt, "Summary format: structured JSON") {
+		t.Fatal("DefaultPrompt missing structured JSON format directive")
 	}
-	for _, oldHeading := range []string{"## 详细总结", "## Insights", "## 可能被忽略但有价值的点", "## 需要辩证看待的地方"} {
+	if !strings.Contains(DefaultPrompt, "Schema version: "+structuredSummarySchemaVersion) {
+		t.Fatal("DefaultPrompt missing schema version")
+	}
+	if !strings.Contains(DefaultPrompt, `Language: zh-hans`) {
+		t.Fatal("DefaultPrompt missing zh-hans language directive")
+	}
+	if !strings.Contains(DefaultPrompt, `必须精确填写 "zh-hans"`) {
+		t.Fatal("DefaultPrompt missing zh-hans language requirement")
+	}
+	if !strings.Contains(DefaultPrompt, `必须精确填写“`+noStocksSentence(VariantSimplified)+`”`) {
+		t.Fatal("DefaultPrompt missing no-stocks fallback sentence")
+	}
+	for _, oldHeading := range []string{"## 详细总结", "## Insights", "## 可能被忽略但有价值的点", "## 需要辩证看待的地方", "## 核心摘要", "## 可能利好/利空的股票"} {
 		if strings.Contains(DefaultPrompt, oldHeading) {
-			t.Fatalf("DefaultPrompt still contains old heading %q", oldHeading)
+			t.Fatalf("DefaultPrompt still contains Markdown heading %q", oldHeading)
 		}
 	}
 }
 
-func TestTraditionalPromptUsesTraditionalHeadings(t *testing.T) {
+func TestTraditionalPromptRequestsStructuredJSONInTraditionalChinese(t *testing.T) {
 	prompt := VariantTraditional.Prompt()
-	for _, heading := range []string{
-		"## 核心摘要",
-		"## 容易被忽略但有價值的資訊",
-		"## 直觀地可以 bullish / bearish on 什麼",
-		"## 隱含地可以 bullish / bearish on 什麼",
-		"## 可能利好/利空的股票",
-	} {
-		if !strings.Contains(prompt, heading) {
-			t.Fatalf("traditional prompt missing heading %q", heading)
+	if !strings.Contains(prompt, "Summary format: structured JSON") {
+		t.Fatal("traditional prompt missing structured JSON format directive")
+	}
+	if !strings.Contains(prompt, "Schema version: "+structuredSummarySchemaVersion) {
+		t.Fatal("traditional prompt missing schema version")
+	}
+	if !strings.Contains(prompt, `Language: zh-hant`) {
+		t.Fatal("traditional prompt missing zh-hant language directive")
+	}
+	if !strings.Contains(prompt, `必須精確填寫 "zh-hant"`) {
+		t.Fatal("traditional prompt missing zh-hant language requirement")
+	}
+	if !strings.Contains(prompt, `必須精確填寫「`+noStocksSentence(VariantTraditional)+`」`) {
+		t.Fatal("traditional prompt missing no-stocks fallback sentence")
+	}
+	for _, oldHeading := range []string{"## 詳細總結", "## Insights", "## 可能被忽略但有價值的點", "## 需要辯證看待的地方", "## 核心摘要", "## 可能利好/利空的股票"} {
+		if strings.Contains(prompt, oldHeading) {
+			t.Fatalf("traditional prompt still contains Markdown heading %q", oldHeading)
 		}
 	}
 }
