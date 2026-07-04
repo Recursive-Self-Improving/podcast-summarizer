@@ -216,6 +216,7 @@ func TestSummaryHeadingTitleAcceptsNumberedInvestmentHeadings(t *testing.T) {
 		"二、容易被忽略但有價值的資訊":                  "容易被忽略但有價值的資訊",
 		"**直观地可以 bullish/bearish on 什么**": "直观地可以 bullish / bearish on 什么",
 		"## 容易被忽略但有价值的资讯":                 "容易被忽略但有价值的信息",
+		"## 容易被忽略但有价值的資訊":                 "容易被忽略但有价值的信息",
 		"隱含地可以 bullish/bearish on 什麼：":    "隱含地可以 bullish / bearish on 什麼",
 		"5）可能利好/利空的股票":                    "可能利好/利空的股票",
 		"## 可能利好、利空的股票":                   "可能利好/利空的股票",
@@ -228,6 +229,63 @@ func TestSummaryHeadingTitleAcceptsNumberedInvestmentHeadings(t *testing.T) {
 				t.Fatalf("summaryHeadingTitle(%q) = %q, %v; want %q, true", heading, got, ok, want)
 			}
 		})
+	}
+}
+
+func TestDetectSummarySectionsAcceptsMixedScriptHeadings(t *testing.T) {
+	// A model summarizing a Traditional-Chinese transcript into Simplified
+	// Chinese can leak Traditional script into individual headings; detection
+	// must still find five sections and normalize titles to the majority
+	// script.
+	summary := strings.Join([]string{
+		"## 核心摘要\ncore",
+		"## 容易被忽略但有價值的資訊\nmissed", // fully Traditional leak
+		"## 直观地可以 bullish / bearish on 什么\nexplicit",
+		"## 隐含地可以 bullish / bearish on 什么\nimplicit",
+		"## 可能利好/利空的股票\nstocks",
+	}, "\n\n")
+
+	sections, traditional, ok := detectSummarySections(summary)
+	if !ok {
+		t.Fatal("mixed-script summary was not detected")
+	}
+	if traditional {
+		t.Fatal("majority-Simplified summary reported as traditional")
+	}
+	for i, section := range sections {
+		if section.Title != expectedSummarySectionTitles[i] {
+			t.Fatalf("section %d title = %q, want %q", i, section.Title, expectedSummarySectionTitles[i])
+		}
+	}
+}
+
+func TestDetectSummarySectionsAcceptsPartiallyConvertedHeading(t *testing.T) {
+	summary := strings.Join([]string{
+		"## 核心摘要\ncore",
+		"## 容易被忽略但有价值的資訊\nmissed", // Simplified 价值 + Traditional 資訊
+		"## 直观地可以 bullish / bearish on 什么\nexplicit",
+		"## 隐含地可以 bullish / bearish on 什么\nimplicit",
+		"## 可能利好/利空的股票\nstocks",
+	}, "\n\n")
+
+	sections, traditional, ok := detectSummarySections(summary)
+	if !ok || traditional {
+		t.Fatalf("detection = (ok=%v, traditional=%v), want (true, false)", ok, traditional)
+	}
+	if sections[1].Title != "容易被忽略但有价值的信息" {
+		t.Fatalf("overlooked section title = %q", sections[1].Title)
+	}
+}
+
+func TestDetectSummarySectionsKeepsTraditionalMajority(t *testing.T) {
+	sections, traditional, ok := detectSummarySections(traditionalInvestmentSummary("core", "missed", "explicit", "implicit", "stocks"))
+	if !ok || !traditional {
+		t.Fatalf("detection = (ok=%v, traditional=%v), want (true, true)", ok, traditional)
+	}
+	for i, section := range sections {
+		if section.Title != expectedTraditionalSummarySectionTitles[i] {
+			t.Fatalf("section %d title = %q, want %q", i, section.Title, expectedTraditionalSummarySectionTitles[i])
+		}
 	}
 }
 

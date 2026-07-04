@@ -3,6 +3,8 @@
 ## Lessons
 
 - `go mod tidy` removes dependencies that are not imported; for initial dependency setup before real usage, keep explicit placeholder imports until the packages are used directly.
+- Simplified (`zh-hans`) summaries of Traditional-Chinese transcripts can leak Traditional script into headings (fully, like `容易被忽略但有價值的資訊`, or partially, like `容易被忽略但有价值的資訊`); `detectSummarySections` matches headings by script-independent key after Traditional→Simplified folding and picks the rendered script by majority vote — never require all five section titles to belong to a single script set.
+- Chasing individual heading-string variants (like commit ee457b1 adding `资讯` aliases) is a losing game; when a heading-detection bug splits along the 简中/繁中 axis, suspect script mixing in one heading and fix the matching to be script-independent instead of adding one more alias.
 - `.env` loading uses `github.com/joho/godotenv` v1.5.1 via `godotenv.Load`, so shell environment variables take precedence over `.env` values.
 - Go embed patterns are relative to the declaring package directory; root-level `migrations/*.sql` are embedded from the module root package and consumed by `internal/db`.
 - When renaming bot slash commands, avoid broad `/summarize` string replacement because it can corrupt the `internal/summarize` import path.
