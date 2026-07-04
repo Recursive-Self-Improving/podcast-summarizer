@@ -81,7 +81,7 @@ type FinalSummaryPartsWithMetadataSender interface {
 }
 
 type SummaryBroadcaster interface {
-	BroadcastFinalSummary(ctx context.Context, chatID int64, text string, metadata display.SummaryMetadata, attrs ...any) error
+	BroadcastFinalSummary(ctx context.Context, chatID int64, text string, metadata display.SummaryMetadata, sourceURL string, attrs ...any) error
 }
 
 type FinalSummaryEditor interface {
@@ -603,16 +603,16 @@ func (s SummaryService) sendSummary(ctx context.Context, media db.MediaItem, req
 		sent = true
 	}
 	if cacheResult.generated && sent {
-		s.broadcastGeneratedSummary(ctx, cache, metadata)
+		s.broadcastGeneratedSummary(ctx, media, cache, metadata)
 	}
 	return sendErr
 }
 
-func (s SummaryService) broadcastGeneratedSummary(ctx context.Context, cache db.SummaryCache, metadata display.SummaryMetadata) {
+func (s SummaryService) broadcastGeneratedSummary(ctx context.Context, media db.MediaItem, cache db.SummaryCache, metadata display.SummaryMetadata) {
 	if s.SummaryBroadcastChannelID == 0 || s.SummaryBroadcaster == nil {
 		return
 	}
-	if err := s.SummaryBroadcaster.BroadcastFinalSummary(context.WithoutCancel(ctx), s.SummaryBroadcastChannelID, cache.SummaryText, metadata, "summary_cache_id", cache.ID); err != nil {
+	if err := s.SummaryBroadcaster.BroadcastFinalSummary(context.WithoutCancel(ctx), s.SummaryBroadcastChannelID, cache.SummaryText, metadata, media.CanonicalURL, "summary_cache_id", cache.ID); err != nil {
 		s.logger().Warn("summary channel broadcast failed", "channel_id", s.SummaryBroadcastChannelID, "summary_cache_id", cache.ID, "error", err)
 	}
 }

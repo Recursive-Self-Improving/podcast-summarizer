@@ -30,6 +30,20 @@ const (
 
 var errSummaryTooManyMessages = errors.New("summary renders to more than two telegram messages")
 
+type summaryRenderOptions struct {
+	linkLabel string
+}
+
+var defaultSummaryRenderOptions = summaryRenderOptions{linkLabel: "链接"}
+var broadcastSummaryRenderOptions = summaryRenderOptions{linkLabel: "来源"}
+
+func (o summaryRenderOptions) metadataLinkLabel() string {
+	if strings.TrimSpace(o.linkLabel) == "" {
+		return defaultSummaryRenderOptions.linkLabel
+	}
+	return strings.TrimSpace(o.linkLabel)
+}
+
 func renderFinalSummaryHTMLMessages(summary string, limit int) []string {
 	messages, _, _ := renderFinalSummaryHTMLMessagesRaw(summary, limit, display.SummaryMetadata{})
 	return messages
@@ -40,7 +54,11 @@ func renderFinalSummaryHTMLParts(summary string, limit int) ([]string, error) {
 }
 
 func renderFinalSummaryHTMLPartsWithMetadata(summary string, metadata display.SummaryMetadata, limit int) ([]string, error) {
-	messages, traditional, err := renderFinalSummaryHTMLMessagesRaw(summary, limit, metadata)
+	return renderFinalSummaryHTMLPartsWithMetadataOptions(summary, metadata, limit, defaultSummaryRenderOptions)
+}
+
+func renderFinalSummaryHTMLPartsWithMetadataOptions(summary string, metadata display.SummaryMetadata, limit int, opts summaryRenderOptions) ([]string, error) {
+	messages, traditional, err := renderFinalSummaryHTMLMessagesRawOptions(summary, limit, metadata, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +71,7 @@ func renderFinalSummaryHTMLPartsWithMetadata(summary string, metadata display.Su
 	}
 	if len(messages) > 2 {
 		if !metadata.Empty() {
-			return renderFinalSummaryHTMLPartsWithMetadata(summary, display.SummaryMetadata{}, limit)
+			return renderFinalSummaryHTMLPartsWithMetadataOptions(summary, display.SummaryMetadata{}, limit, opts)
 		}
 		return nil, errSummaryTooManyMessages
 	}
@@ -61,6 +79,10 @@ func renderFinalSummaryHTMLPartsWithMetadata(summary string, metadata display.Su
 }
 
 func renderFinalSummaryHTMLMessagesRaw(summary string, limit int, metadata display.SummaryMetadata) ([]string, bool, error) {
+	return renderFinalSummaryHTMLMessagesRawOptions(summary, limit, metadata, defaultSummaryRenderOptions)
+}
+
+func renderFinalSummaryHTMLMessagesRawOptions(summary string, limit int, metadata display.SummaryMetadata, opts summaryRenderOptions) ([]string, bool, error) {
 	if limit <= 0 {
 		limit = maxTelegramTextChars
 	}
@@ -78,7 +100,7 @@ func renderFinalSummaryHTMLMessagesRaw(summary string, limit int, metadata displ
 	}
 
 	fragments := renderSummaryFragments(sections, reservedLimit)
-	if header := renderSummaryMetadataHeaderHTML(metadata); header != "" {
+	if header := renderSummaryMetadataHeaderHTMLOptions(metadata, opts); header != "" {
 		fragments = append([]string{header}, fragments...)
 	}
 	messages := packHTMLFragments(fragments, limit)
@@ -261,6 +283,10 @@ func containsAll(text string, needles ...string) bool {
 }
 
 func renderSummaryMetadataHeaderHTML(metadata display.SummaryMetadata) string {
+	return renderSummaryMetadataHeaderHTMLOptions(metadata, defaultSummaryRenderOptions)
+}
+
+func renderSummaryMetadataHeaderHTMLOptions(metadata display.SummaryMetadata, opts summaryRenderOptions) string {
 	if metadata.Empty() {
 		return ""
 	}
@@ -275,12 +301,16 @@ func renderSummaryMetadataHeaderHTML(metadata display.SummaryMetadata) string {
 		lines = append(lines, "发布时间："+html.EscapeString(strings.TrimSpace(metadata.PubDate)))
 	}
 	if strings.TrimSpace(metadata.Link) != "" {
-		lines = append(lines, "链接："+html.EscapeString(strings.TrimSpace(metadata.Link)))
+		lines = append(lines, opts.metadataLinkLabel()+"："+html.EscapeString(strings.TrimSpace(metadata.Link)))
 	}
 	return strings.Join(lines, "\n")
 }
 
 func summaryTextWithMetadata(summary string, metadata display.SummaryMetadata) string {
+	return summaryTextWithMetadataOptions(summary, metadata, defaultSummaryRenderOptions)
+}
+
+func summaryTextWithMetadataOptions(summary string, metadata display.SummaryMetadata, opts summaryRenderOptions) string {
 	if metadata.Empty() {
 		return summary
 	}
@@ -295,7 +325,7 @@ func summaryTextWithMetadata(summary string, metadata display.SummaryMetadata) s
 		lines = append(lines, "发布时间："+strings.TrimSpace(metadata.PubDate))
 	}
 	if strings.TrimSpace(metadata.Link) != "" {
-		lines = append(lines, "链接："+strings.TrimSpace(metadata.Link))
+		lines = append(lines, opts.metadataLinkLabel()+"："+strings.TrimSpace(metadata.Link))
 	}
 	return strings.Join(lines, "\n") + "\n\n" + strings.TrimSpace(summary)
 }

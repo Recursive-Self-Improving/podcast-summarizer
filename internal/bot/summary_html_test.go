@@ -48,6 +48,24 @@ func TestRenderFinalSummaryHTMLPartsWithMetadataAddsEscapedHeader(t *testing.T) 
 	}
 }
 
+func TestRenderFinalSummaryHTMLPartsWithBroadcastSourceLabel(t *testing.T) {
+	messages, err := renderFinalSummaryHTMLPartsWithMetadataOptions(
+		simplifiedInvestmentSummary("summary", "missed", "explicit", "implicit", "stocks"),
+		display.SummaryMetadata{EpisodeTitle: "E1", Link: "https://source.example/?a=1&b=2"},
+		maxTelegramTextChars,
+		broadcastSummaryRenderOptions,
+	)
+	if err != nil {
+		t.Fatalf("renderFinalSummaryHTMLPartsWithMetadataOptions returned error: %v", err)
+	}
+	if len(messages) != 2 {
+		t.Fatalf("messages = %#v", messages)
+	}
+	if !strings.Contains(messages[0], "来源：https://source.example/?a=1&amp;b=2") || strings.Contains(messages[0], "链接：") {
+		t.Fatalf("broadcast metadata header missing source label or duplicated link: %s", messages[0])
+	}
+}
+
 func TestRenderFinalSummaryHTMLPartsAddsSimplifiedPlaceholder(t *testing.T) {
 	messages, err := renderFinalSummaryHTMLParts(simplifiedInvestmentSummary("summary", "missed", "explicit", "implicit", "stocks"), maxTelegramTextChars)
 	if err != nil {

@@ -48,8 +48,12 @@ func NewRichMessageClient(token string) richMessageSender {
 // Block-level elements (<details>/<summary>, <p>, <ul>, <pre>, <h4>) are
 // therefore required to separate titles, paragraphs, and list items visually.
 func renderSummaryRichHTML(summary string, metadata display.SummaryMetadata) string {
+	return renderSummaryRichHTMLOptions(summary, metadata, defaultSummaryRenderOptions)
+}
+
+func renderSummaryRichHTMLOptions(summary string, metadata display.SummaryMetadata, opts summaryRenderOptions) string {
 	var b strings.Builder
-	if header := renderSummaryMetadataHeaderHTML(metadata); header != "" {
+	if header := renderSummaryMetadataHeaderHTMLOptions(metadata, opts); header != "" {
 		// The shared header joins lines with "\n", which the legacy
 		// parse_mode=HTML path needs (newlines are line breaks there).
 		// In rich HTML newlines collapse, so convert to <br>.

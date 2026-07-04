@@ -227,7 +227,7 @@ func TestSummaryServiceManualSummaryStillReplies(t *testing.T) {
 func TestSummaryServiceBroadcastsGeneratedSummaryAfterSuccessfulDelivery(t *testing.T) {
 	ctx := context.Background()
 	repo := newSummaryRepo()
-	media := db.MediaItem{ID: 1, TranscriptText: "transcript"}
+	media := db.MediaItem{ID: 1, CanonicalURL: "https://source.example/episode", TranscriptText: "transcript"}
 	prompt := summarize.ResolvePrompt("")
 	promptHash := summarize.PromptHash(prompt)
 	request1 := repo.addRequest(db.SummaryRequest{MediaItemID: media.ID, ChatID: 10, PromptHash: promptHash, PromptText: prompt, Status: "pending_summary"})
@@ -247,6 +247,12 @@ func TestSummaryServiceBroadcastsGeneratedSummaryAfterSuccessfulDelivery(t *test
 	}
 	if broadcaster.calls[0].chatID != -1001234567890 || broadcaster.calls[0].text != "generated summary" {
 		t.Fatalf("broadcast call = %#v", broadcaster.calls[0])
+	}
+	if broadcaster.calls[0].sourceURL != "https://source.example/episode" {
+		t.Fatalf("broadcast source URL = %q", broadcaster.calls[0].sourceURL)
+	}
+	if !slices.Equal(sender.metadata, []display.SummaryMetadata{{}, {}}) {
+		t.Fatalf("sender metadata = %#v", sender.metadata)
 	}
 }
 
@@ -315,7 +321,7 @@ func TestSummaryServiceBroadcastsWatchGeneratedSummaryOnce(t *testing.T) {
 	broadcaster := &fakeSummaryBroadcaster{}
 	service := SummaryService{Repo: repo, Summarizer: &fakeSummaryLLM{responses: []string{"watch summary"}}, Sender: sender, SummaryBroadcastChannelID: -1001234567890, SummaryBroadcaster: broadcaster, Model: "model"}
 
-	result, err := service.RequestWatchSummary(ctx, WatchSummaryCommand{Provider: "xiaoyuzhou", ProviderMediaID: "episode", CanonicalURL: "https://www.xiaoyuzhoufm.com/episode/episode", Subscribers: []WatchSummarySubscriber{{ChatID: 10, UserID: 100}, {ChatID: 11, UserID: 101}}})
+	result, err := service.RequestWatchSummary(ctx, WatchSummaryCommand{Provider: "xiaoyuzhou", ProviderMediaID: "episode", CanonicalURL: "https://www.xiaoyuzhoufm.com/episode/episode", Subscribers: []WatchSummarySubscriber{{ChatID: 10, UserID: 100}, {ChatID: 11, UserID: 101}}, Metadata: display.SummaryMetadata{Link: "https://metadata.example/episode"}})
 	if err != nil {
 		t.Fatalf("RequestWatchSummary returned error: %v", err)
 	}
@@ -324,6 +330,9 @@ func TestSummaryServiceBroadcastsWatchGeneratedSummaryOnce(t *testing.T) {
 	}
 	if len(broadcaster.calls) != 1 || broadcaster.calls[0].text != "watch summary" {
 		t.Fatalf("broadcast calls = %#v", broadcaster.calls)
+	}
+	if broadcaster.calls[0].sourceURL != "https://www.xiaoyuzhoufm.com/episode/episode" || broadcaster.calls[0].metadata.Link != "https://metadata.example/episode" {
+		t.Fatalf("broadcast call = %#v", broadcaster.calls[0])
 	}
 }
 
@@ -1370,9 +1379,10 @@ func (f *fakeFinalSummarySender) SendFinalSummaryPartsWithMetadata(_ context.Con
 }
 
 type broadcastCall struct {
-	chatID   int64
-	text     string
-	metadata display.SummaryMetadata
+	chatID    int64
+	text      string
+	metadata  display.SummaryMetadata
+	sourceURL string
 }
 
 type fakeSummaryBroadcaster struct {
@@ -1380,8 +1390,8 @@ type fakeSummaryBroadcaster struct {
 	err   error
 }
 
-func (f *fakeSummaryBroadcaster) BroadcastFinalSummary(_ context.Context, chatID int64, text string, metadata display.SummaryMetadata, _ ...any) error {
-	f.calls = append(f.calls, broadcastCall{chatID: chatID, text: text, metadata: metadata})
+func (f *fakeSummaryBroadcaster) BroadcastFinalSummary(_ context.Context, chatID int64, text string, metadata display.SummaryMetadata, sourceURL string, _ ...any) error {
+	f.calls = append(f.calls, broadcastCall{chatID: chatID, text: text, metadata: metadata, sourceURL: sourceURL})
 	return f.err
 }
 

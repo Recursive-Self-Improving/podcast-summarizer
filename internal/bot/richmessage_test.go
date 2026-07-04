@@ -273,6 +273,9 @@ func TestSenderSendFinalSummaryUsesRichMessageWhenAvailable(t *testing.T) {
 	if !strings.Contains(rich.sentHTML, "<details>") {
 		t.Fatalf("sent HTML missing details: %s", rich.sentHTML)
 	}
+	if strings.Contains(rich.sentHTML, "来源：") {
+		t.Fatalf("normal rich final summary used broadcast source label: %s", rich.sentHTML)
+	}
 	if rich.sentMarkup == nil {
 		t.Fatal("variant keyboard not attached")
 	}
@@ -287,7 +290,7 @@ func TestSenderBroadcastFinalSummaryUsesRichMessageWithoutReplyOrMarkup(t *testi
 	sender := Sender{Client: client, RichSender: rich, TempDir: t.TempDir()}
 	summary := simplifiedInvestmentSummary("core", "missed", "explicit", "implicit", "stocks")
 
-	if err := sender.BroadcastFinalSummary(context.Background(), -1001234567890, summary, display.SummaryMetadata{EpisodeTitle: "Episode"}); err != nil {
+	if err := sender.BroadcastFinalSummary(context.Background(), -1001234567890, summary, display.SummaryMetadata{EpisodeTitle: "Episode"}, "https://source.example/?a=1&b=2"); err != nil {
 		t.Fatalf("BroadcastFinalSummary: %v", err)
 	}
 	if !rich.sendCalled {
@@ -299,8 +302,32 @@ func TestSenderBroadcastFinalSummaryUsesRichMessageWithoutReplyOrMarkup(t *testi
 	if rich.sentMarkup != nil {
 		t.Fatalf("markup = %#v", rich.sentMarkup)
 	}
-	if !strings.Contains(rich.sentHTML, "Episode") || !strings.Contains(rich.sentHTML, "<details>") {
+	if !strings.Contains(rich.sentHTML, "Episode") || !strings.Contains(rich.sentHTML, "来源：https://source.example/?a=1&amp;b=2") || !strings.Contains(rich.sentHTML, "<details>") {
 		t.Fatalf("sent HTML missing metadata/details: %s", rich.sentHTML)
+	}
+	if strings.Contains(rich.sentHTML, "链接：") {
+		t.Fatalf("broadcast HTML used normal link label: %s", rich.sentHTML)
+	}
+	if len(client.htmlMessages) != 0 {
+		t.Fatalf("legacy HTML path used: %#v", client.htmlMessages)
+	}
+}
+
+func TestSenderBroadcastFinalSummaryUsesExistingMetadataLinkAsSource(t *testing.T) {
+	client := &fakeSenderClient{}
+	rich := &stubRichSender{}
+	sender := Sender{Client: client, RichSender: rich, TempDir: t.TempDir()}
+	summary := simplifiedInvestmentSummary("core", "missed", "explicit", "implicit", "stocks")
+
+	metadata := display.SummaryMetadata{EpisodeTitle: "Episode", Link: "https://metadata.example/episode"}
+	if err := sender.BroadcastFinalSummary(context.Background(), -1001234567890, summary, metadata, "https://source.example/episode"); err != nil {
+		t.Fatalf("BroadcastFinalSummary: %v", err)
+	}
+	if !strings.Contains(rich.sentHTML, "来源：https://metadata.example/episode") {
+		t.Fatalf("sent HTML missing metadata source link: %s", rich.sentHTML)
+	}
+	if strings.Contains(rich.sentHTML, "链接：") || strings.Contains(rich.sentHTML, "https://source.example/episode") {
+		t.Fatalf("broadcast HTML duplicated or used fallback source: %s", rich.sentHTML)
 	}
 	if len(client.htmlMessages) != 0 {
 		t.Fatalf("legacy HTML path used: %#v", client.htmlMessages)
