@@ -61,29 +61,6 @@ func TestRenderSummaryRichHTMLDetectsObservedHeadingVariants(t *testing.T) {
 	}
 }
 
-func TestRenderSummaryRichHTMLDetectsMixedScriptHeadings(t *testing.T) {
-	summary := strings.Join([]string{
-		"## 核心摘要\ncore",
-		"## 容易被忽略但有價值的資訊\nmissed", // Traditional leak in a Simplified summary
-		"## 直观地可以 bullish/bearish on 什么\nexplicit",
-		"## 隐含地可以 bullish/bearish on 什么\nimplicit",
-		"## 可能利好/利空的股票\nstocks",
-	}, "\n\n")
-
-	html := renderSummaryRichHTML(summary, display.SummaryMetadata{})
-	if strings.Contains(html, "<summary>摘要</summary>") {
-		t.Fatalf("mixed-script headings should not fall back to outer 摘要 block: %s", html)
-	}
-	if c := strings.Count(html, "<details>"); c != len(expectedSummarySectionTitles) {
-		t.Fatalf("details count = %d, want %d: %s", c, len(expectedSummarySectionTitles), html)
-	}
-	for _, title := range expectedSummarySectionTitles {
-		if !strings.Contains(html, "<summary>"+title+"</summary>") {
-			t.Fatalf("missing normalized section summary label %q: %s", title, html)
-		}
-	}
-}
-
 func TestRenderSummaryRichHTMLPlacesMetadataOutsideDetails(t *testing.T) {
 	summary := simplifiedInvestmentSummary("core", "missed", "explicit", "implicit", "stocks")
 	metadata := display.SummaryMetadata{PodcastTitle: "Pod <X>", EpisodeTitle: "Ep <Y>", PubDate: "2026-06-30", Link: "https://example.com/?a=1&b=2"}

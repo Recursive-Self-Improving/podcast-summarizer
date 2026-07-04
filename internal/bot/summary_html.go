@@ -20,37 +20,8 @@ type summaryPart struct {
 	FenceLen int
 }
 
-// summarySectionKey identifies one of the five expected investment sections
-// independently of the heading's script or wording variant, so a summary that
-// mixes Simplified and Traditional headings still resolves to five sections.
-type summarySectionKey int
-
-const (
-	sectionKeyCore summarySectionKey = iota
-	sectionKeyOverlooked
-	sectionKeyExplicit
-	sectionKeyImplicit
-	sectionKeyStocks
-)
-
-// Canonical rendered titles per script, indexed by summarySectionKey.
 var expectedSummarySectionTitles = []string{"核心摘要", "容易被忽略但有价值的信息", "直观地可以 bullish / bearish on 什么", "隐含地可以 bullish / bearish on 什么", "可能利好/利空的股票"}
 var expectedTraditionalSummarySectionTitles = []string{"核心摘要", "容易被忽略但有價值的資訊", "直觀地可以 bullish / bearish on 什麼", "隱含地可以 bullish / bearish on 什麼", "可能利好/利空的股票"}
-
-// summaryHeadingFolder maps the Traditional-script characters that occur in
-// observed heading variants to their Simplified forms, so key matching works
-// on mixed-script headings (e.g. `容易被忽略但有价值的資訊` from a model
-// summarizing a Traditional-Chinese transcript into Simplified Chinese).
-var summaryHeadingFolder = strings.NewReplacer("價", "价", "資", "资", "訊", "讯", "隱", "隐", "觀", "观", "麼", "么", "視", "视")
-
-// Script markers: characters whose form differs between the two scripts in
-// the expected headings. A heading votes for the script whose markers it
-// contains; script-neutral headings (核心摘要, 可能利好/利空的股票) vote for
-// neither.
-const (
-	traditionalHeadingMarkers = "價資訊隱觀麼視"
-	simplifiedHeadingMarkers  = "价资讯隐观么视"
-)
 
 const (
 	simplifiedPlaceholderSummary  = "（消息占位符，为切换到长版占位。）"
@@ -135,25 +106,18 @@ func renderFinalSummaryHTMLMessagesRaw(summary string, limit int, metadata displ
 
 func detectSummarySections(summary string) ([]summarySection, bool, bool) {
 	type detectedSection struct {
-		key  summarySectionKey
-		body []string
+		title string
+		body  []string
 	}
 
 	var sections []detectedSection
 	current := -1
 	fenceLen := 0
-	traditionalVotes, simplifiedVotes := 0, 0
 	for _, line := range strings.Split(strings.ReplaceAll(summary, "\r\n", "\n"), "\n") {
 		if fenceLen == 0 {
-			if key, candidate, ok := summaryHeadingKey(line); ok {
-				sections = append(sections, detectedSection{key: key})
+			if title, ok := summaryHeadingTitle(line); ok {
+				sections = append(sections, detectedSection{title: title})
 				current = len(sections) - 1
-				if strings.ContainsAny(candidate, traditionalHeadingMarkers) {
-					traditionalVotes++
-				}
-				if strings.ContainsAny(candidate, simplifiedHeadingMarkers) {
-					simplifiedVotes++
-				}
 				continue
 			}
 			if markerLen, ok := openingFenceLine(line); ok {
@@ -171,59 +135,59 @@ func detectSummarySections(summary string) ([]summarySection, bool, bool) {
 		return nil, false, false
 	}
 
-	traditional := traditionalVotes > simplifiedVotes
-	titles := expectedSummarySectionTitles
-	if traditional {
-		titles = expectedTraditionalSummarySectionTitles
-	}
-	seen := map[summarySectionKey]bool{}
-	result := make([]summarySection, 0, len(sections))
+	seen := map[string]bool{}
+	result := make([]summarySection, 0, len(expectedSummarySectionTitles))
 	for _, section := range sections {
 		body := strings.TrimSpace(strings.Join(section.body, "\n"))
-		if seen[section.key] || body == "" {
+		if seen[section.title] || body == "" {
 			return nil, false, false
 		}
-		seen[section.key] = true
-		result = append(result, summarySection{Title: titles[section.key], Body: body})
+		seen[section.title] = true
+		result = append(result, summarySection{Title: section.title, Body: body})
 	}
-	return result, traditional, true
+	if hasAllTitles(seen, expectedSummarySectionTitles) {
+		return result, false, true
+	}
+	if hasAllTitles(seen, expectedTraditionalSummarySectionTitles) {
+		return result, true, true
+	}
+	return nil, false, false
 }
 
-// summaryHeadingKey resolves a heading-looking line to its section key. The
-// normalized candidate is folded to Simplified before matching so pure
-// Traditional, pure Simplified, and mixed-script variants all resolve; the
-// returned candidate (unfolded) lets callers inspect the original script.
-func summaryHeadingKey(line string) (summarySectionKey, string, bool) {
-	candidate := normalizeSummaryHeading(line)
-	if candidate == "" {
-		return 0, "", false
+func hasAllTitles(seen map[string]bool, titles []string) bool {
+	for _, title := range titles {
+		if !seen[title] {
+			return false
+		}
 	}
-	folded := summaryHeadingFolder.Replace(candidate)
-	switch {
-	case strings.Contains(folded, "核心摘要"):
-		return sectionKeyCore, candidate, true
-	case containsAny(folded, "容易被忽略", "容易被忽视", "有价值的信息", "有价值信息", "有价值的资讯", "有价值资讯", "有价值的讯息"):
-		return sectionKeyOverlooked, candidate, true
-	case strings.Contains(folded, "隐含"):
-		return sectionKeyImplicit, candidate, true
-	case strings.Contains(folded, "直观"):
-		return sectionKeyExplicit, candidate, true
-	case containsAny(folded, "利好/利空", "利好利空") || containsAll(folded, "利好", "利空"):
-		return sectionKeyStocks, candidate, true
-	default:
-		return 0, "", false
-	}
+	return true
 }
 
 func summaryHeadingTitle(line string) (string, bool) {
-	key, candidate, ok := summaryHeadingKey(line)
-	if !ok {
+	candidate := normalizeSummaryHeading(line)
+	if candidate == "" {
 		return "", false
 	}
-	if strings.ContainsAny(candidate, traditionalHeadingMarkers) && !strings.ContainsAny(candidate, simplifiedHeadingMarkers) {
-		return expectedTraditionalSummarySectionTitles[key], true
+	switch {
+	case containsAny(candidate, "核心摘要"):
+		return "核心摘要", true
+	case containsAny(candidate, "容易被忽略但有價值的資訊", "有價值的資訊"):
+		return "容易被忽略但有價值的資訊", true
+	case containsAny(candidate, "容易被忽略但有价值的信息", "有价值的信息", "容易被忽略但有价值的资讯", "有价值的资讯", "有价值资讯"):
+		return "容易被忽略但有价值的信息", true
+	case containsAny(candidate, "隱含地可以 bullish / bearish on 什麼", "隱含"):
+		return "隱含地可以 bullish / bearish on 什麼", true
+	case containsAny(candidate, "隐含地可以 bullish / bearish on 什么", "隐含"):
+		return "隐含地可以 bullish / bearish on 什么", true
+	case containsAny(candidate, "直觀地可以 bullish / bearish on 什麼", "直觀"):
+		return "直觀地可以 bullish / bearish on 什麼", true
+	case containsAny(candidate, "直观地可以 bullish / bearish on 什么", "直观"):
+		return "直观地可以 bullish / bearish on 什么", true
+	case containsAny(candidate, "可能利好/利空的股票", "利好/利空", "利好利空") || containsAll(candidate, "利好", "利空"):
+		return "可能利好/利空的股票", true
+	default:
+		return "", false
 	}
-	return expectedSummarySectionTitles[key], true
 }
 
 func normalizeSummaryHeading(line string) string {
