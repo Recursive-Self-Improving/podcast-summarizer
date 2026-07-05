@@ -90,7 +90,7 @@ func renderFinalSummaryHTMLMessagesRawOptions(summary string, limit int, metadat
 	if !ok {
 		sections = []summarySection{{Title: "Summary", Body: strings.TrimSpace(summary)}}
 	}
-	if len(sections) == 0 || strings.TrimSpace(sections[0].Body) == "" {
+	if len(sections) == 0 || allSummarySectionBodiesEmpty(sections) {
 		return nil, traditional, nil
 	}
 
@@ -161,7 +161,7 @@ func detectSummarySections(summary string) ([]summarySection, bool, bool) {
 	result := make([]summarySection, 0, len(expectedSummarySectionTitles))
 	for _, section := range sections {
 		body := strings.TrimSpace(strings.Join(section.body, "\n"))
-		if seen[section.title] || body == "" {
+		if seen[section.title] {
 			return nil, false, false
 		}
 		seen[section.title] = true
@@ -174,6 +174,15 @@ func detectSummarySections(summary string) ([]summarySection, bool, bool) {
 		return result, true, true
 	}
 	return nil, false, false
+}
+
+func allSummarySectionBodiesEmpty(sections []summarySection) bool {
+	for _, section := range sections {
+		if strings.TrimSpace(section.Body) != "" {
+			return false
+		}
+	}
+	return true
 }
 
 func hasAllTitles(seen map[string]bool, titles []string) bool {

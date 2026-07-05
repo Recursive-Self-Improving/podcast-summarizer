@@ -219,3 +219,46 @@ func TestRenderStructuredSummaryMarkdownTrimsBodyWhitespace(t *testing.T) {
 		t.Fatalf("rendered markdown missing trimmed body\n%s", markdown)
 	}
 }
+
+// TestRenderStructuredSummaryMarkdownSalvagesEmbeddedSectionsFromCore defends
+// the contract that when one JSON field (CoreSummary) contains all five
+// canonical Markdown sections and another field (OverlookedInformation) is
+// blank, renderStructuredSummaryMarkdown salvages the embedded sections and
+// emits canonical Markdown with the extracted "容易被忽略但有价值的信息" body
+// instead of failing validation on the blank field.
+func TestRenderStructuredSummaryMarkdownSalvagesEmbeddedSectionsFromCore(t *testing.T) {
+	core := strings.Join([]string{
+		"## 核心摘要\n\ncore body text",
+		"## 容易被忽略但有价值的信息\n\noverlooked body text",
+		"## 直观地可以 bullish / bearish on 什么\n\nexplicit body",
+		"## 隐含地可以 bullish / bearish on 什么\n\nimplicit body",
+		"## 可能利好/利空的股票\n\n本期未提及具体标的",
+	}, "\n\n")
+	summary := StructuredSummary{
+		Language:              VariantSimplified.Code,
+		CoreSummary:           core,
+		OverlookedInformation: "",
+	}
+
+	markdown, err := renderStructuredSummaryMarkdown(summary, VariantSimplified)
+	if err != nil {
+		t.Fatalf("render returned error for embedded-section salvage: %v", err)
+	}
+	for _, heading := range []string{
+		"## 核心摘要",
+		"## 容易被忽略但有价值的信息",
+		"## 直观地可以 bullish / bearish on 什么",
+		"## 隐含地可以 bullish / bearish on 什么",
+		"## 可能利好/利空的股票",
+	} {
+		if !strings.Contains(markdown, heading) {
+			t.Fatalf("salvaged markdown missing heading %q\n%s", heading, markdown)
+		}
+	}
+	if !strings.Contains(markdown, "overlooked body text") {
+		t.Fatalf("salvaged markdown missing extracted overlooked body\n%s", markdown)
+	}
+	if !strings.Contains(markdown, "本期未提及具体标的") {
+		t.Fatalf("salvaged markdown missing extracted stocks body\n%s", markdown)
+	}
+}

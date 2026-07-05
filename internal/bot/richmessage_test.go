@@ -140,6 +140,36 @@ func TestRenderSummaryRichHTMLSeparatesParagraphsByBlankLines(t *testing.T) {
 	}
 }
 
+// TestRenderSummaryRichHTMLKeepsFiveSectionsWhenOneBodyIsEmpty defends the
+// contract that a summary with exactly the five expected headings still
+// renders as five collapsible <details> blocks even when one section body is
+// empty, instead of collapsing the whole text into a single 摘要 fallback.
+func TestRenderSummaryRichHTMLKeepsFiveSectionsWhenOneBodyIsEmpty(t *testing.T) {
+	summary := strings.Join([]string{
+		"## 核心摘要\ncore body",
+		"## 容易被忽略但有价值的信息\n",
+		"## 直观地可以 bullish / bearish on 什么\nexplicit body",
+		"## 隐含地可以 bullish / bearish on 什么\nimplicit body",
+		"## 可能利好/利空的股票\nstocks body",
+	}, "\n\n")
+
+	html := renderSummaryRichHTML(summary, display.SummaryMetadata{})
+	if c := strings.Count(html, "<details>"); c != len(expectedSummarySectionTitles) {
+		t.Fatalf("details count = %d, want %d (empty body must not collapse sections): %s", c, len(expectedSummarySectionTitles), html)
+	}
+	if strings.Contains(html, "<summary>摘要</summary>") {
+		t.Fatalf("empty section body should not trigger whole-summary 摘要 fallback: %s", html)
+	}
+	if !strings.Contains(html, "<summary>容易被忽略但有价值的信息</summary>") {
+		t.Fatalf("missing empty section's summary label: %s", html)
+	}
+	for _, title := range expectedSummarySectionTitles {
+		if !strings.Contains(html, "<summary>"+title+"</summary>") {
+			t.Fatalf("missing section summary label %q: %s", title, html)
+		}
+	}
+}
+
 func TestRichMessageClientSendAndEdit(t *testing.T) {
 	type captured struct {
 		Method string
