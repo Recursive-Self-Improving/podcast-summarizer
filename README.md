@@ -8,51 +8,6 @@ Supported media sources:
 - Xiaoyuzhou
 - SoundOn
 
-## Workflow
-
-```mermaid
-flowchart TD
-    U[Telegram user sends /summarize_podcast URL] --> B[Bot handler validates auth and parses URL]
-    B --> P[Provider registry normalizes media URL]
-    P --> DB[(SQLite: media, requests, cache, jobs)]
-    DB --> T{Transcript already stored?}
-    T -- yes --> S[Summarize transcript]
-    T -- no --> Sub{Provider subtitle lookup supported?}
-    Sub -- subtitle found --> SaveSub[Store subtitle transcript]
-    SaveSub --> S
-    Sub -- no subtitle / lookup failed --> Q[Create transcription job]
-    Q --> W[Queue worker claims job]
-    W --> A[Resolve and download audio]
-    A --> C[ffmpeg converts to 16 kHz mono WAV]
-    C --> L{Audio longer than segment size?}
-    L -- no --> FW[faster-whisper transcribes WAV]
-    L -- yes --> Split[ffmpeg splits WAV into segments]
-    Split --> FW
-    FW --> SaveWhisper[Store whisper transcript]
-    SaveWhisper --> S
-    S --> Cache{Summary cached for prompt + model?}
-    Cache -- hit --> Send[Send cached Telegram summary]
-    Cache -- miss --> OAI[OpenAI Responses API creates structured summary]
-    OAI --> Store[Store summary cache]
-    Store --> Send
-    Send --> Done[Rich Telegram message + 简中/繁中 buttons]
-```
-
-### Transcription defaults
-
-The fallback transcription path uses `faster-whisper`.
-
-Default settings:
-
-| Setting | Environment variable | Default |
-| --- | --- | --- |
-| Whisper model | `WHISPER_MODEL` | `small` |
-| Device | `WHISPER_DEVICE` | `cpu` |
-| Compute type | `WHISPER_COMPUTE` | `int8` |
-| Audio split size | `WHISPER_SEGMENT_SECONDS` | `300` seconds / 5 minutes |
-
-Long audio is converted to 16 kHz mono WAV first. If the WAV duration is greater than `WHISPER_SEGMENT_SECONDS`, ffmpeg splits it into `part_000.wav`, `part_001.wav`, etc.; otherwise the single WAV is passed to faster-whisper. The same segment size is also passed to the faster-whisper helper.
-
 ## Configuration
 
 Create a `.env` file from the example:
@@ -151,6 +106,51 @@ Owner commands:
 ```
 
 `/summarize_podcast` may return immediately if a transcript and summary cache already exist. Otherwise it sends progress updates while downloading, splitting, transcribing, summarizing, and delivering the final rich Telegram summary.
+
+## Workflow
+
+```mermaid
+flowchart TD
+    U[Telegram user sends /summarize_podcast URL] --> B[Bot handler validates auth and parses URL]
+    B --> P[Provider registry normalizes media URL]
+    P --> DB[(SQLite: media, requests, cache, jobs)]
+    DB --> T{Transcript already stored?}
+    T -- yes --> S[Summarize transcript]
+    T -- no --> Sub{Provider subtitle lookup supported?}
+    Sub -- subtitle found --> SaveSub[Store subtitle transcript]
+    SaveSub --> S
+    Sub -- no subtitle / lookup failed --> Q[Create transcription job]
+    Q --> W[Queue worker claims job]
+    W --> A[Resolve and download audio]
+    A --> C[ffmpeg converts to 16 kHz mono WAV]
+    C --> L{Audio longer than segment size?}
+    L -- no --> FW[faster-whisper transcribes WAV]
+    L -- yes --> Split[ffmpeg splits WAV into segments]
+    Split --> FW
+    FW --> SaveWhisper[Store whisper transcript]
+    SaveWhisper --> S
+    S --> Cache{Summary cached for prompt + model?}
+    Cache -- hit --> Send[Send cached Telegram summary]
+    Cache -- miss --> OAI[OpenAI Responses API creates structured summary]
+    OAI --> Store[Store summary cache]
+    Store --> Send
+    Send --> Done[Rich Telegram message + 简中/繁中 buttons]
+```
+
+### Transcription defaults
+
+The fallback transcription path uses `faster-whisper`.
+
+Default settings:
+
+| Setting | Environment variable | Default |
+| --- | --- | --- |
+| Whisper model | `WHISPER_MODEL` | `small` |
+| Device | `WHISPER_DEVICE` | `cpu` |
+| Compute type | `WHISPER_COMPUTE` | `int8` |
+| Audio split size | `WHISPER_SEGMENT_SECONDS` | `300` seconds / 5 minutes |
+
+Long audio is converted to 16 kHz mono WAV first. If the WAV duration is greater than `WHISPER_SEGMENT_SECONDS`, ffmpeg splits it into `part_000.wav`, `part_001.wav`, etc.; otherwise the single WAV is passed to faster-whisper. The same segment size is also passed to the faster-whisper helper.
 
 ## Crash recovery
 
