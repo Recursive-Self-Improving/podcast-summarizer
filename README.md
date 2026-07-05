@@ -151,3 +151,23 @@ Owner commands:
 ```
 
 `/summarize_podcast` may return immediately if a transcript and summary cache already exist. Otherwise it sends progress updates while downloading, splitting, transcribing, summarizing, and delivering the final rich Telegram summary.
+
+## Crash recovery
+
+The bot keeps durable state in SQLite, so Docker or process restarts do not lose queued work as long as the `podcast-data` volume is preserved.
+
+On startup it recovers interrupted work before accepting new traffic:
+
+- Transcription jobs left in `downloading_audio`, `converting_audio`, `splitting_audio`, or `transcribing` are moved back to `queued` when the media item still has no transcript.
+- Summary requests left in `summarizing` are moved back to `pending_summary`.
+- Summary requests left in `sending` become `delivery_unknown` because Telegram may or may not have received the final message before the crash.
+
+While running, a recovery loop executes every minute:
+
+- Summary requests stuck in `summarizing` for more than 10 minutes are requeued as `pending_summary`.
+- Pending transcript requests without an active transcription job get a new `queued` transcription job.
+- Media with pending summary requests is processed again, using cached transcripts and summaries when available.
+
+Graceful shutdown is handled through SIGTERM/SIGINT. Docker Compose gives the container 30 seconds (`stop_grace_period: 30s`) to drain loops. If shutdown interrupts transcription, the worker requeues the job without incrementing the retry count. Non-cancellation transcription failures are retried up to two attempts by default.
+
+Operational note: avoid `docker compose down -v` unless you intentionally want to delete recovery state. It removes the SQLite volume and the faster-whisper model cache.
