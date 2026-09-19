@@ -16,6 +16,8 @@ Create a `.env` file from the example:
 cp .env.example .env
 ```
 
+The bot loads `.env` without overriding existing shell environment variables. See [`.env.example`](.env.example) for the full configuration reference.
+
 Required values:
 
 ```dotenv
@@ -43,6 +45,12 @@ WHISPER_SEGMENT_SECONDS=300
 # Extra yt-dlp args for current YouTube JS challenges.
 YT_DLP_ARGS=--extractor-args youtube:player_client=android_vr --js-runtimes node --remote-components ejs:github
 ```
+
+`YT_DLP_ARGS` applies to both subtitle and audio downloads. Use it for deployment-specific extractor flags (for example, `--extractor-args "youtube:player_client=mweb"`), cookies (`--cookies /path/to/cookies.txt`), or `--config-location /path/to/yt-dlp.conf`. Keep `youtube:player_client=...` attached to `--extractor-args`, never as a standalone argument. YouTube JS challenge handling needs Node.js or Deno; the example above selects Node.js and the remote EJS solver. If using Deno instead, select it with `--js-runtimes deno`.
+
+`YT_DLP_PATH`, `FFMPEG_PATH`, and `PYTHON_PATH` default to `yt-dlp`, `ffmpeg`, and `python3`. Set absolute paths when a deployment user or systemd service has a restricted `PATH`. The selected Python environment must have `faster-whisper` installed.
+
+Outside Docker, leave `TEMP_ROOT` empty to use Go's system temp directory (`TMPDIR` or `/tmp`). Set it to a directory writable by the service user only when the system temp directory is unsuitable.
 
 For Docker, leave `SQLITE_PATH` and `TEMP_ROOT` unset in `.env` unless you intentionally want to override the container defaults. `docker-compose.yml` sets:
 
@@ -82,13 +90,27 @@ Compose uses two named volumes:
 
 The runtime image is CPU-only. It includes the Go bot binary, `yt-dlp`, `ffmpeg`, `python3`, `faster-whisper`, and `nodejs` for yt-dlp YouTube JS challenge handling.
 
+## Local development
+
+Use Go 1.26.1 or newer (see [`go.mod`](go.mod)), plus `yt-dlp`, `ffmpeg`, Python 3 with `faster-whisper`, and Node.js or Deno for YouTube JS challenges. Configure `.env` as above, then use the existing Makefile targets:
+
+```sh
+make run    # Run the bot with go run ./cmd/bot.
+make build  # Build bin/podcast-summarizer.
+make check  # Format Go code, run go vet, and run all Go tests.
+```
+
+For build-only validation without repository artifacts, use `go build -o /tmp/podcast-summarizer-bot ./cmd/bot`. Avoid plain `go build ./cmd/bot`, which leaves a root-level `bot` binary.
+
+Contributor conventions and implementation pitfalls are maintained in [AGENTS.md](AGENTS.md).
+
 ## Bot commands
 
 User commands:
 
 ```text
-/summarize_podcast <MEDIA_URL>
-/summary_status <MEDIA_URL>
+/summarize_podcast [MEDIA_URL]
+/summary_status [MEDIA_URL]
 /help
 ```
 
@@ -106,6 +128,10 @@ Owner commands:
 ```
 
 `/summarize_podcast` may return immediately if a transcript and summary cache already exist. Otherwise it sends progress updates while downloading, splitting, transcribing, summarizing, and delivering the final rich Telegram summary.
+
+Omit the URL from `/summarize_podcast` or `/summary_status` to receive a targeted reply prompt. Reply to that prompt with the media URL; unrelated text is ignored.
+
+The `简中` (`zh-hans`) and `繁中` (`zh-hant`) buttons switch only the current summary's language. They do not change the deployment's `DEFAULT_SUMMARY_VARIANT` for future requests.
 
 ## Workflow
 
@@ -151,6 +177,8 @@ Default settings:
 | Audio split size | `WHISPER_SEGMENT_SECONDS` | `300` seconds / 5 minutes |
 
 Long audio is converted to 16 kHz mono WAV first. If the WAV duration is greater than `WHISPER_SEGMENT_SECONDS`, ffmpeg splits it into `part_000.wav`, `part_001.wav`, etc.; otherwise the single WAV is passed to faster-whisper. The same segment size is also passed to the faster-whisper helper.
+
+The faster-whisper Python helper is embedded in the Go binary and written into the audio work directory at runtime. Deployments do not need a separate copy of `scripts/faster_whisper_transcribe.py`.
 
 ## Crash recovery
 
