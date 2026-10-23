@@ -92,7 +92,7 @@ The runtime image is CPU-only. It includes the Go bot binary, `yt-dlp`, `ffmpeg`
 
 ## Local development
 
-Use Go 1.26.1 or newer (see [`go.mod`](go.mod)), plus `yt-dlp`, `ffmpeg`, Python 3 with `faster-whisper`, and Node.js or Deno for YouTube JS challenges. Configure `.env` as above, then use the existing Makefile targets:
+Use Go 1.27.3 or newer (see [`go.mod`](go.mod)), plus `yt-dlp`, `ffmpeg`, Python 3.13.17+ with `faster-whisper`, and Node.js 24.22.1+ for YouTube JS challenges. Container builds pin those runtimes, pip 26.2.2, patched Debian CA certificates, and certifi 2026.10.19 or newer; rebuild existing images to refresh trust stores. Configure `.env` as above, then use the existing Makefile targets:
 
 ```sh
 make run    # Run the bot with go run ./cmd/bot.

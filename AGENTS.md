@@ -1,5 +1,7 @@
 # Lessons
 
+- A multi-language media image has independent trust stores: pin patched Go, Python, Node, pip's vendored CA bundle, certifi, and Debian ca-certificates together; upgrading only the Go binary leaves Python downloads exposed. Isolated CLI smoke must run outside the repository to avoid loading an operator's `.env` and contacting Telegram.
+
 ## Documentation and Go development
 
 - Keep setup, configuration, operations, and user-facing behavior in [README.md](README.md); keep reusable engineering lessons in this file's `Lessons` section.

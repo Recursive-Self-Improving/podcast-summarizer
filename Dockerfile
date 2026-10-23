@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 # ----- Builder stage: compile the Go binary -----
-FROM golang:1.26-bookworm AS builder
+FROM golang:1.27.3-bookworm AS builder
 
 WORKDIR /src
 
@@ -14,7 +14,10 @@ COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/podcast-summarizer ./cmd/bot
 
 # ----- Runtime stage: Python + external media tools -----
-FROM python:3.12-slim-bookworm AS runtime
+FROM node:24.22.1-bookworm-slim AS node
+FROM python:3.13.17-slim-bookworm AS runtime
+
+COPY --from=node /usr/local/bin/node /usr/local/bin/node
 
 # ffmpeg: audio extraction/splitting.
 # nodejs: required by yt-dlp 2026.x for YouTube JS challenges (--js-runtimes node).
@@ -22,12 +25,11 @@ FROM python:3.12-slim-bookworm AS runtime
 # ca-certificates curl: TLS + health for yt-dlp remote components.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ffmpeg \
-        nodejs \
-        ca-certificates \
+        ca-certificates=20250419~deb12u2 \
         curl \
     && rm -rf /var/lib/apt/lists/* \
-    && pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir yt-dlp faster-whisper
+    && pip install --no-cache-dir --upgrade 'pip==26.2.2' \
+    && pip install --no-cache-dir 'certifi>=2026.10.19' yt-dlp faster-whisper
 
 # Non-root user for the long-running bot process.
 # Create /data as root and hand it to the non-root user so the named volume
