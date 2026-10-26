@@ -17,6 +17,12 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/podcast-summarizer
 FROM node:24.22.1-bookworm-slim AS node
 FROM python:3.13.17-slim-bookworm AS runtime
 
+# DLA-4855-1: refresh the system decoder used by curl and other native clients.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libbrotli1 \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libbrotli1)" ge '1.0.9-2+deb12u1' \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 
 # ffmpeg: audio extraction/splitting.

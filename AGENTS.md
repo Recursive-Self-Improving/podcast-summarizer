@@ -1,5 +1,7 @@
 # Lessons
 
+- CVE-2026-111497 affects native Brotli, not pure-Go compression implementations. Node 24.22.1 fixes its bundled decoder, but curl/native clients still need the separate Bookworm `libbrotli1 >= 1.0.9-2+deb12u1` floor (DLA-4855-1). Explicitly install and check that package: an apt refresh alone may retain an old base-image dependency.
+
 - A multi-language media image has independent trust stores: pin patched Go, Python, Node, pip's vendored CA bundle, certifi, and Debian ca-certificates together; upgrading only the Go binary leaves Python downloads exposed. Isolated CLI smoke must run outside the repository to avoid loading an operator's `.env` and contacting Telegram.
 
 ## Documentation and Go development

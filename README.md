@@ -1,5 +1,12 @@
 # Podcast Summarizer
 
+## Brotli security baseline
+
+The container build requires Debian Bookworm `libbrotli1 >= 1.0.9-2+deb12u1`
+([CVE-2026-111497 / DLA-4855-1](https://security-tracker.debian.org/tracker/CVE-2026-111497)).
+Node 24.22.1 fixes its bundled decoder independently. Rebuild affected images and
+devcontainers without cache, then redeploy; restarting an old image does not patch it.
+
 Telegram bot that turns podcast/video URLs into Chinese investment-oriented summaries. It normalizes supported media URLs, reuses subtitles when available, falls back to faster-whisper transcription, summarizes through the OpenAI Responses API, caches results in SQLite, and sends rich Telegram summaries with language switch buttons.
 
 Supported media sources:
